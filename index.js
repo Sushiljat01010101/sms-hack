@@ -64,14 +64,25 @@ bot.command('cf', (ctx) => {
     requestingChatId = ctx.chat.id;
 });
 
-// Launch bot
-bot.launch().then(() => {
+// Launch bot - dropPendingUpdates avoids 409 Conflict on Render restarts
+bot.launch({ dropPendingUpdates: true }).then(() => {
     console.log('Telegraf Bot launched!');
+}).catch((err) => {
+    console.error('Bot launch error:', err.message);
+    // Don't exit - server still functions for Android polling
 });
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+// Keep server alive even if bot crashes
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Rejection:', reason);
+});
 
 // --- Express API Endpoints for Android App ---
 
