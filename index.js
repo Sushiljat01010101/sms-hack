@@ -152,20 +152,89 @@ bot.action(/^cmd_(\w+)_(.+)$/, async (ctx) => {
     );
 });
 
-// "Send SMS" button — prompt user to type /ms command
+// --- SMS Wizard (step-by-step UI) ---
+// smsWizard[chatId] = { step: 'number' | 'message', deviceId, smsTo }
+const smsWizard = {};
+
+// Step 1: user taps "📤 Send SMS" button
 bot.action(/^cmd_smsmode_(.+)$/, async (ctx) => {
     const deviceId = ctx.match[1];
     const device = devices[deviceId];
-    if (!device) { await ctx.answerCbQuery('Device offline!'); return; }
+    if (!device) { await ctx.answerCbQuery('⚠️ Device offline!'); return; }
     userSession[ctx.chat.id] = deviceId;
+    smsWizard[ctx.chat.id] = { step: 'number', deviceId };
     await ctx.answerCbQuery();
     await ctx.editMessageText(
-        `📤 *Send SMS from ${device.name}*\n\nType the command below:\n\`/ms +91XXXXXXXXXX Your message here\`\n\nExample:\n\`/ms +919876543210 Hello World!\``,
-        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Back', `select_device_${deviceId}`)]]) }
+        `📤 *Send SMS from ${device.name}*\n\n━━━━━━━━━━━━━━\n📞 *Step 1 of 2*\n\nPlease type the **phone number** to send the SMS to:\n\n_Example: +919876543210_`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', `select_device_${deviceId}`)]
+            ])
+        }
     );
 });
 
-// /ms <number> <message> — send SMS from the selected device
+// Step 2 & 3: intercept user text input for wizard
+bot.on('text', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const wizard = smsWizard[chatId];
+
+    // If not in wizard mode, check for /ms command handled separately
+    if (!wizard) return;
+
+    const text = ctx.message.text.trim();
+
+    if (wizard.step === 'number') {
+        // User sent the phone number
+        wizard.smsTo = text;
+        wizard.step = 'message';
+        smsWizard[chatId] = wizard;
+
+        await ctx.reply(
+            `✅ *Number saved:* \`${text}\`\n\n━━━━━━━━━━━━━━\n💬 *Step 2 of 2*\n\nNow type the **message** you want to send:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Cancel', `select_device_${wizard.deviceId}`)]
+                ])
+            }
+        );
+
+    } else if (wizard.step === 'message') {
+        // User sent the message body — queue the SMS
+        const smsTo   = wizard.smsTo;
+        const smsBody = text;
+        const deviceId = wizard.deviceId;
+        delete smsWizard[chatId];
+
+        const device = devices[deviceId];
+        if (!device) {
+            return ctx.reply('⚠️ Device went offline. Please select a device again via /devices.');
+        }
+
+        device.pendingCommand = 'ms';
+        device.requestingChatId = chatId;
+        deviceExtras[deviceId] = { smsTo, smsBody };
+
+        await ctx.reply(
+            `🚀 *SMS Queued Successfully!*\n\n` +
+            `📱 Device : *${device.name}*\n` +
+            `📞 To     : \`${smsTo}\`\n` +
+            `💬 Message: ${smsBody}\n\n` +
+            `_The message will be sent within ~10 seconds._`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('📤 Send Another SMS', `cmd_smsmode_${deviceId}`)],
+                    [Markup.button.callback('« Back to Menu',      `select_device_${deviceId}`)]
+                ])
+            }
+        );
+    }
+});
+
+// /ms <number> <message> — shortcut command (still supported)
 bot.command('ms', async (ctx) => {
     const chatId = ctx.chat.id;
     const deviceId = userSession[chatId];
@@ -175,7 +244,7 @@ bot.command('ms', async (ctx) => {
     const raw = ctx.message.text.replace('/ms', '').trim();
     const spaceIdx = raw.indexOf(' ');
     if (spaceIdx === -1 || !raw) {
-        return ctx.reply('❌ Usage: `/ms <phone_number> <message>`\n\nExample:\n`/ms +919876543210 Hello!`', { parse_mode: 'Markdown' });
+        return ctx.reply('❌ Usage: `/ms <phone_number> <message>`\n\nOr tap 📤 *Send SMS* from the device menu.', { parse_mode: 'Markdown' });
     }
     const smsTo = raw.substring(0, spaceIdx).trim();
     const smsBody = raw.substring(spaceIdx + 1).trim();
@@ -186,7 +255,10 @@ bot.command('ms', async (ctx) => {
     device.requestingChatId = chatId;
     deviceExtras[deviceId] = { smsTo, smsBody };
 
-    ctx.reply(`📤 *SMS queued for ${device.name}*\n\n📞 To: \`${smsTo}\`\n💬 Message: ${smsBody}\n\n_Will be sent within ~10 seconds._`, { parse_mode: 'Markdown' });
+    ctx.reply(
+        `🚀 *SMS Queued!*\n\n📱 Device : *${device.name}*\n📞 To     : \`${smsTo}\`\n💬 Message: ${smsBody}\n\n_Will be sent within ~10 seconds._`,
+        { parse_mode: 'Markdown' }
+    );
 });
 
 // Launch bot
