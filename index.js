@@ -225,5 +225,24 @@ app.post('/upload-location', async (req, res) => {
 // Health check
 app.get('/', (req, res) => res.send('✅ Multi-device bot server running.'));
 
+// 4. Android sends real-time notifications & SMS alerts through here
+app.post('/send-notification', async (req, res) => {
+    const { deviceId, text } = req.body;
+    if (!text) return res.status(400).send('Missing text.');
+
+    const device = devices[deviceId];
+    const deviceLabel = device ? `📱 *${device.name}*` : '📱 *Unknown Device*';
+    const fullText = `${deviceLabel}\n${text}`;
+
+    const CHAT_ID = '1691680798';
+    try {
+        await bot.telegram.sendMessage(CHAT_ID, fullText, { parse_mode: 'Markdown' });
+        res.status(200).send('Sent.');
+    } catch (e) {
+        console.error('Notification forward error:', e.message);
+        res.status(500).send('Error.');
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
