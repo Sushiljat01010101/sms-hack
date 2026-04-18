@@ -129,7 +129,10 @@
 
     <div class="topbar">
         <div class="logo"><i class="fa-solid fa-satellite-dish"></i> Nexus Pro</div>
-        <div class="top-badge" id="syncStatus"><i class="fa-solid fa-rotate fa-spin"></i> Syncing</div>
+        <div style="display:flex; align-items:center; gap: 10px;">
+            <div class="top-badge" id="syncStatus"><i class="fa-solid fa-rotate fa-spin"></i> Syncing</div>
+            <i class="fa-solid fa-gear" style="font-size: 1.2rem; cursor: pointer; color: var(--text-muted);" onclick="navTo('settings')"></i>
+        </div>
     </div>
 
     <div class="content-area">
@@ -212,6 +215,33 @@
             <div id="locationsContainer" style="display:none;"></div>
         </div>
 
+        <!-- Settings Screen -->
+        <div class="screen" id="screen-settings">
+            <h2 class="section-title">Push Notification Alerts</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">Select which apps should trigger a pop-up and sound on your Android device. Data will still be silently logged to Intel tab even if turned off.</p>
+            
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><i class="fa-brands fa-whatsapp" style="color:#25D366;"></i> WhatsApp</div>
+                <input type="checkbox" id="pref_whatsapp" onchange="savePreferences()" checked style="transform: scale(1.5);">
+            </div>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><i class="fa-brands fa-instagram" style="color:#E1306C;"></i> Instagram</div>
+                <input type="checkbox" id="pref_instagram" onchange="savePreferences()" checked style="transform: scale(1.5);">
+            </div>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><i class="fa-brands fa-telegram" style="color:#0088cc;"></i> Telegram</div>
+                <input type="checkbox" id="pref_telegram" onchange="savePreferences()" checked style="transform: scale(1.5);">
+            </div>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><i class="fa-solid fa-message" style="color:var(--primary-color);"></i> SMS</div>
+                <input type="checkbox" id="pref_sms" onchange="savePreferences()" checked style="transform: scale(1.5);">
+            </div>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center;">
+                <div><i class="fa-solid fa-bell" style="color:var(--text-muted);"></i> Other App Alerts</div>
+                <input type="checkbox" id="pref_others" onchange="savePreferences()" checked style="transform: scale(1.5);">
+            </div>
+        </div>
+
     </div>
 
     <!-- Bottom Navigation -->
@@ -245,6 +275,31 @@
             locations: JSON.parse(localStorage.getItem('nexus_locations')) || []
         };
         let activeAlertTab = 'notifications';
+
+        // Preferences Logic
+        let alertPrefs = JSON.parse(localStorage.getItem('nexus_prefs')) || { whatsapp: true, instagram: true, telegram: true, sms: true, others: true };
+        function applyPreferencesToUI() {
+            document.getElementById('pref_whatsapp').checked = alertPrefs.whatsapp;
+            document.getElementById('pref_instagram').checked = alertPrefs.instagram;
+            document.getElementById('pref_telegram').checked = alertPrefs.telegram;
+            document.getElementById('pref_sms').checked = alertPrefs.sms;
+            document.getElementById('pref_others').checked = alertPrefs.others;
+        }
+
+        function savePreferences() {
+            alertPrefs = {
+                whatsapp: document.getElementById('pref_whatsapp').checked,
+                instagram: document.getElementById('pref_instagram').checked,
+                telegram: document.getElementById('pref_telegram').checked,
+                sms: document.getElementById('pref_sms').checked,
+                others: document.getElementById('pref_others').checked
+            };
+            localStorage.setItem('nexus_prefs', JSON.stringify(alertPrefs));
+            if (window.Android && window.Android.savePrefs) {
+                window.Android.savePrefs(alertPrefs.whatsapp, alertPrefs.instagram, alertPrefs.telegram, alertPrefs.sms, alertPrefs.others);
+            }
+            showToast("Preferences Saved");
+        }
 
         function showToast(msg) {
             const container = document.getElementById('toastContainer');
@@ -382,7 +437,7 @@
             c.innerHTML = filtered.map(f => `
                 <div class="list-card">
                     <div class="data-meta"><span>${f.deviceName||'Unknown'}</span><span>${timeAgo(f.timestamp)}</span></div>
-                    <div class="data-content"><i class="fa-solid fa-paperclip" style="color:var(--primary-color)"></i> <a href="${f.url}" download="${f.originalname}">${f.originalname}</a></div>
+                    <div class="data-content"><i class="fa-solid fa-paperclip" style="color:var(--primary-color)"></i> <a href="javascript:void(0)" onclick="if(window.Android && window.Android.openBrowser){window.Android.openBrowser('${f.url}')} else {window.open('${f.url}', '_blank')}">${f.originalname}</a></div>
                 </div>
             `).join('');
         }
@@ -484,6 +539,11 @@
         }
 
         renderAll();
+        applyPreferencesToUI();
+        if (window.Android && window.Android.savePrefs) {
+            // Push initial prefs to Android on load
+            window.Android.savePrefs(alertPrefs.whatsapp, alertPrefs.instagram, alertPrefs.telegram, alertPrefs.sms, alertPrefs.others);
+        }
         fetchData();
         setInterval(fetchData, 8000);
     </script>
