@@ -39,7 +39,7 @@ function getOnlineDevices() {
 }
 
 // --- Telegram Bot ---
-const BOT_TOKEN = '8710683386:AAFwZ_aRbFNVBVBO0HRGW6S_LBTCgYIiYZc';
+const BOT_TOKEN = '5616800505:AAG_2WuCVYUZLdohkmwt4XM2YpQo3CHQ0nU';
 const bot = new Telegraf(BOT_TOKEN);
 
 // Helper: send device list menu
